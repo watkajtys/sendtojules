@@ -5,6 +5,33 @@
     box-sizing: border-box;
 }
 
+._jules_highlight {
+    outline: 3px dashed #E040FB !important; /* A bright purple dash */
+    background-color: rgba(224, 64, 251, 0.1) !important; /* A light purple tint */
+    cursor: crosshair !important;
+    box-sizing: border-box;
+}
+
+._jules_highlight {
+    outline: 3px dashed #E040FB !important; /* A bright purple dash */
+    background-color: rgba(224, 64, 251, 0.1) !important; /* A light purple tint */
+    cursor: crosshair !important;
+    box-sizing: border-box;
+}
+
+._jules_tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-family: sans-serif;
+    font-size: 12px;
+    z-index: 1000000;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
 ._jules_breadcrumb {
     position: fixed;
     bottom: 0;
@@ -17,4 +44,7 @@
     font-size: 14px;
     z-index: 999999;
     text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

@@ -1,9 +1,16 @@
 (function() {
 
+    let tooltip;
     let breadcrumb;
     let debounceTimer;
 
-    function createBreadcrumb() {
+    function createUI() {
+        // Create tooltip
+        tooltip = document.createElement('div');
+        tooltip.classList.add('_jules_tooltip');
+        document.body.appendChild(tooltip);
+
+        // Create breadcrumb
         breadcrumb = document.createElement('div');
         breadcrumb.classList.add('_jules_breadcrumb');
         document.body.appendChild(breadcrumb);
@@ -58,19 +65,34 @@
     // --- 1. Define event handlers ---
 
     /**
-     * Handles the mouseover event to highlight the element and update the breadcrumb.
-     * Note: This event fires frequently. The `getSelector` function can be a bit slow on complex pages.
-     * For this use case, the performance impact is likely negligible, but it's something to be aware of.
+     * Handles the mouseover event to highlight the element and update the UI.
      * @param {MouseEvent} event The mouseover event.
      */
     function onMouseOver(event) {
         event.target.classList.add('_jules_highlight');
-        updateBreadcrumbDebounced(event.target);
+        updateUIDebounced(event);
     }
 
-    const updateBreadcrumbDebounced = debounce((targetElement) => {
+    const updateUIDebounced = debounce((event) => {
+        const targetElement = event.target;
+        const fullSelector = getSelector(targetElement);
+
+        // Update breadcrumb
         if (breadcrumb) {
-            breadcrumb.textContent = getSelector(targetElement);
+            breadcrumb.textContent = fullSelector;
+        }
+
+        // Update tooltip
+        if (tooltip) {
+            const components = fullSelector.split(' > ');
+            const truncatedSelector = components.slice(-2).join(' > ');
+            const dimensions = `${targetElement.offsetWidth}px x ${targetElement.offsetHeight}px`;
+
+            tooltip.innerHTML = `<div>${truncatedSelector}</div><div>${dimensions}</div>`;
+
+            // Position the tooltip near the cursor
+            tooltip.style.left = (event.pageX + 15) + 'px';
+            tooltip.style.top = (event.pageY + 15) + 'px';
         }
     }, 100); // Debounce for 100ms
 
@@ -128,6 +150,9 @@
         document.removeEventListener('click', onClick, true);
         document.removeEventListener('keydown', onKeyDown, true);
 
+        if (tooltip) {
+            tooltip.remove();
+        }
         if (breadcrumb) {
             breadcrumb.remove();
         }
@@ -141,7 +166,7 @@
 
     // --- 3. Attach all event listeners ---
 
-    createBreadcrumb();
+    createUI();
     document.addEventListener('mouseover', onMouseOver);
     document.addEventListener('mouseout', onMouseOut);
     document.addEventListener('click', onClick, true);
