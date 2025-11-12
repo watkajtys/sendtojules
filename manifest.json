@@ -11,7 +11,7 @@
   ],
 
   "host_permissions": [
-    "https://developers.google.com/jules/api"
+    "https://jules.googleapis.com/*"
   ],
 
   "background": {
@@ -33,6 +33,15 @@
     {
       "resources": ["selector.css"],
       "matches": ["<all_urls>"]
+    }
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["selector.js"],
+      "css": ["selector.css"],
+      "run_at": "document_idle"
     }
   ]
 }
