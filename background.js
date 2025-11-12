@@ -6,11 +6,26 @@ let sourcesCache = null; // Renamed from sourceCache for clarity
 
 function resetState() {
     capturedHtml = null;
-    chrome.action.setBadgeText({text: ''});
+    chrome.action.setBadgeText({ text: '' });
     sourcesCache = null;
-    // --- FIX: Consolidate session clearing here ---
-    chrome.storage.session.remove('julesCapturedHtml');
-    chrome.storage.session.remove('julesCapturedTabId'); // Clear captured tab ID
+
+    // --- IMPROVED CLEANUP ---
+    // Proactively find the tab where the selector might be active and clean it up.
+    chrome.storage.session.get(['julesCapturedTabId'], (result) => {
+        const tabId = result.julesCapturedTabId;
+        if (tabId) {
+            // Send a cleanup message to the specific tab.
+            chrome.tabs.sendMessage(tabId, { action: "cleanupSelector" }).catch(err => {
+                // Ignore errors, as the tab might have been closed.
+                if (!err.message.includes("Receiving end does not exist.")) {
+                    console.error("Error sending cleanup message:", err);
+                }
+            });
+        }
+    });
+
+    // Clear all session data.
+    chrome.storage.session.remove(['julesCapturedHtml', 'julesCapturedTabId']);
 }
 
 async function fetchSources(apiKey) {
@@ -116,29 +131,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.action === "startSelection") {
-
         resetState();
 
-        // Start fetching sources in the background NOW,
-        // so they're ready when the user opens the popup.
         chrome.storage.sync.get(['julesApiKey'], async (result) => {
             if (result.julesApiKey) {
-                // This call will populate the 'sourcesCache'
                 await fetchSources(result.julesApiKey);
             }
         });
 
-        chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+            if (tabs.length === 0) return;
             const tabId = tabs[0].id;
-            chrome.storage.session.set({ 'julesCapturedTabId': tabId }); // Store the tabId in session storage
+            chrome.storage.session.set({ 'julesCapturedTabId': tabId });
 
+            try {
+                // First, inject the CSS.
+                await chrome.scripting.insertCSS({
+                    target: { tabId: tabId },
+                    files: ["selector.css"]
+                });
 
+                // Next, execute the content script.
+                await chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    files: ["selector.js"]
+                });
 
-            chrome.scripting.executeScript({
-                target: {tabId: tabId},
-                files: ["selector.js"]
-            });
+                // Finally, send the message to activate the selector.
+                await chrome.tabs.sendMessage(tabId, { action: "startSelection" });
+
+            } catch (err) {
+                console.error("Failed to inject scripts or send message:", err);
+            }
         });
+        return true; // Keep the message channel open for async operations
     }
 
     if (message.action === "elementCaptured") {
