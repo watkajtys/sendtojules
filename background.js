@@ -1,5 +1,5 @@
 // Global state
-let capturedHtml = null;
+let capturedData = null;
 
 // Constants
 const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
@@ -8,7 +8,7 @@ const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 // --- State Management ---
 
 function resetState() {
-    capturedHtml = null;
+    capturedData = null;
     chrome.action.setBadgeText({ text: '' });
 
     // Proactively clean up content scripts in the last known tab
@@ -25,7 +25,7 @@ function resetState() {
     });
 
     // Clear all session data
-    chrome.storage.session.remove(['julesCapturedHtml', 'julesCapturedTabId']);
+    chrome.storage.session.remove(['julesCapturedData', 'julesCapturedTabId']);
 }
 
 // --- API Interaction ---
@@ -88,10 +88,16 @@ async function fetchSources(apiKey) {
     }
 }
 
-async function createJulesSession(task, html, sourceName, apiKey) {
+async function createJulesSession(task, data, sourceName, apiKey) {
     const sessionsApiUrl = `${API_BASE_URL}/sessions`;
     const cleanTask = task.trim();
-    const combinedPrompt = `${cleanTask}\n\nHere is the HTML context for the element I selected:\n\`\`\`html\n${html}\n\`\`\``;
+
+    // Construct a more detailed context string
+    let contextString = `Tag: ${data.tag}`;
+    if (data.id) contextString += `, ID: ${data.id}`;
+    if (data.classes) contextString += `, Classes: ${data.classes}`;
+
+    const combinedPrompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
     const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
 
     const payload = {
@@ -134,14 +140,14 @@ async function createJulesSession(task, html, sourceName, apiKey) {
 
 function handleGetPopupData(sendResponse) {
     // Send back the current captured state and recent repos
-    chrome.storage.session.get(['julesCapturedHtml'], (sessionResult) => {
-        capturedHtml = sessionResult.julesCapturedHtml || null;
-        const state = capturedHtml ? 'elementCaptured' : 'readyToSelect';
+    chrome.storage.session.get(['julesCapturedData'], (sessionResult) => {
+        capturedData = sessionResult.julesCapturedData || null;
+        const state = capturedData ? 'elementCaptured' : 'readyToSelect';
 
         chrome.storage.local.get({ mostRecentRepos: [] }, (localResult) => {
             sendResponse({
                 state: state,
-                capturedHtml: capturedHtml,
+                capturedHtml: capturedData ? capturedData.outerHTML : null, // For popup display
                 recentRepos: localResult.mostRecentRepos
             });
         });
@@ -177,8 +183,8 @@ async function handleStartSelection() {
 }
 
 function handleElementCaptured(message) {
-    capturedHtml = message.html;
-    chrome.storage.session.set({ 'julesCapturedHtml': message.html });
+    capturedData = message.data;
+    chrome.storage.session.set({ 'julesCapturedData': message.data });
     chrome.action.setBadgeText({ text: '✅' });
     chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
 }
@@ -187,7 +193,6 @@ async function handleSubmitTask(message) {
     const { task, repositoryId } = message;
 
     // --- Save to Most Recent ---
-    // We need to find the full source object to save it.
     const sourcesResult = await chrome.storage.local.get('julesSourcesCache');
     const allSources = sourcesResult.julesSourcesCache?.sources || [];
     const selectedSource = allSources.find(s => s.id === repositoryId);
@@ -195,34 +200,28 @@ async function handleSubmitTask(message) {
     if (selectedSource) {
         const recentResult = await chrome.storage.local.get({ mostRecentRepos: [] });
         let recentRepos = recentResult.mostRecentRepos;
-        // Remove if it already exists to avoid duplicates and move it to the front.
         recentRepos = recentRepos.filter(r => r.id !== selectedSource.id);
         recentRepos.unshift(selectedSource);
-        // Keep the list at a max of 3.
-        if (recentRepos.length > 3) {
-            recentRepos.pop();
-        }
+        if (recentRepos.length > 3) recentRepos.pop();
         await chrome.storage.local.set({ mostRecentRepos: recentRepos });
     }
     // --- End Save to Most Recent ---
 
-
-    const onHtmlReady = (html) => {
+    const onDataReady = (data) => {
         chrome.storage.sync.get(['julesApiKey'], (result) => {
             if (!result.julesApiKey) {
                 chrome.runtime.sendMessage({ action: "julesError", error: "API Key not set. Please set it in Options." });
                 return;
             }
-            createJulesSession(task, html, repositoryId, result.julesApiKey);
+            createJulesSession(task, data, repositoryId, result.julesApiKey);
         });
     };
 
-    // Use the HTML from the global state or try to restore it from session.
-    const htmlToUse = capturedHtml || (await chrome.storage.session.get('julesCapturedHtml')).julesCapturedHtml;
+    const dataToUse = capturedData || (await chrome.storage.session.get('julesCapturedData')).julesCapturedData;
 
-    if (htmlToUse) {
-        capturedHtml = htmlToUse; // Ensure global state is consistent
-        onHtmlReady(htmlToUse);
+    if (dataToUse) {
+        capturedData = dataToUse; // Ensure global state is consistent
+        onDataReady(dataToUse);
     } else {
         chrome.runtime.sendMessage({ action: "julesError", error: "No element captured." });
     }
