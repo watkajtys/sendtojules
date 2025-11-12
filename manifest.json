@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Jules API Helper",
+  "version": "1.0",
+  "description": "Select an element and sent to Jules API",
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "https://developers.google.com/jules/api"
+  ],
+
+  "background": {
+    "service_worker":"background.js"
+  },
+
+  "action": {
+    "default_popup": "popup.html"
+  },
+
+  "options_page": "options.html",
+
+  "web_accessible_resources": [
+    {
+      "resources": ["selector.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

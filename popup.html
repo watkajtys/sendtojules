@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Send To Jules</title>
+
+        <style>
+            /* * Using the color variables you provided to match the screenshot.
+             */
+            :root {
+                --bg-primary: rgb(25 26 31);
+                --bg-secondary: rgb(35 39 47);
+                --bg-dropdown: rgb(38 38 38);
+                --bg-dropdown-hover: rgb(53 53 53);
+                --text-primary: rgb(250 250 250);
+                --text-secondary: rgb(207 207 207);
+                --text-placeholder: rgb(111 111 111);
+                --text-error: rgb(250 91 56);
+                --border-primary: rgb(111 111 111);
+
+                /* This color is color-picked from the screenshot button */
+                --button-primary-bg: rgb(186, 131, 172);
+            }
+
+            body {
+                width: 300px;
+                padding: 15px;
+                font-family: sans-serif;
+                background-color: var(--bg-primary);
+                color: var(--text-primary);
+            }
+
+            h3 {
+                color: var(--text-primary);
+                font-weight: 500;
+                margin-top: 0;
+            }
+
+            label {
+                color: var(--text-secondary);
+                font-size: 0.9em;
+                margin-top: 10px;
+                display: block;
+            }
+
+            button {
+                width: 100%;
+                padding: 10px;
+                border: none;
+                cursor: pointer;
+                font-weight: bold;
+                margin-top: 10px;
+                border-radius: 6px;
+                color: var(--text-primary);
+            }
+
+            /* Primary Submit Button */
+            #submitTask {
+                background-color: var(--button-primary-bg);
+                color: var(--text-primary);
+            }
+
+            /* Secondary "Start Over" Button */
+            #startOver {
+                background-color: var(--button-primary-bg);
+                color: var(--text-primary);
+            }
+
+            /* Tertiary buttons (Select, Reselect) */
+            #selectElement,
+            #reselect {
+                background-color: var(--bg-secondary);
+                border: 1px solid var(--border-primary);
+            }
+
+            button:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
+            /* Inputs */
+            textarea,
+            #repoSearch {
+                width: 100%;
+                box-sizing: border-box; /* important */
+                margin-top: 5px;
+                background-color: var(--bg-secondary);
+                color: var(--text-primary);
+                border: 1px solid var(--border-primary);
+                border-radius: 6px;
+                padding: 8px;
+            }
+
+            textarea {
+                height: 80px;
+                resize: vertical;
+            }
+
+            #repoSearch {
+                height: 38px;
+            }
+
+            /* Placeholder text */
+            ::placeholder {
+                color: var(--text-placeholder);
+                opacity: 1;
+            }
+
+            /* Search results dropdown */
+            #repoResults {
+                background-color: var(--bg-dropdown);
+                border: 1px solid var(--border-primary);
+                border-top: none;
+                border-radius: 0 0 6px 6px;
+                max-height: 100px;
+                overflow-y: auto;
+                display: none;
+                position: relative;
+                z-index: 10;
+            }
+
+            /* Individual result item */
+            #repoResults div {
+                padding: 8px 10px;
+                cursor: pointer;
+                color: var(--text-secondary);
+            }
+
+            /* Hover/Selected state (like "InspireBoardAngular") */
+            #repoResults div:hover {
+                background-color: var(--bg-dropdown-hover);
+                color: var(--text-primary);
+            }
+
+            /* Result view */
+            #resultView pre {
+                background-color: var(--bg-secondary);
+                color: var(--text-primary);
+                border: 1px solid var(--border-primary);
+                padding: 10px;
+                border-radius: 4px;
+                white-space: pre-wrap;
+                word-break: break-all;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+
+            #resultView pre a {
+                color: var(--text-primary);
+                font-weight: bold;
+                text-decoration: underline;
+            }
+            #resultView pre p {
+                font-weight: bold;
+                margin: 0 0 5px 0;
+            }
+
+            /* Status/Error messages */
+            #status {
+                margin-top: 10px;
+                font-size: 0.9em;
+                font-style: italic;
+                color: var(--text-error); /* Use error color */
+            }
+        </style>
+    </head>
+    <body>
+        <h3>Send To Jules</h3>
+
+        <div id="selectView">
+            <button id="selectElement">Select an Element</button>
+        </div>
+
+        <div id="taskView" style="display: none;">
+
+            <label for="repoSearch">Repository</label>
+            <input type="text" id="repoSearch" placeholder="Search for a source..." style="width: 100%; height: 30px; margin-top: 5px; box-sizing: border-box;">
+
+            <div id="repoResults" style="border: 1px solid #555; max-height: 100px; overflow-y: auto; display: none; background: #fff; position: relative; z-index: 10;">
+            </div>
+
+            <input type="hidden" id="selectedRepo" value="">
+
+
+            <label for="taskPrompt">Description</label>
+            <textarea id="taskPrompt" placeholder="Examine this element"></textarea>
+            <button id="submitTask">Send To Jules</button>
+            <button id="reselect">Reselect Element</button>
+        </div>
+
+        <div id="resultView" style="display: none;">
+            <p>Response</p>
+            <pre><code id="apiResponse"></code></pre>
+            <button id="startOver">Start Over</button>
+        </div>
+
+        <div id="status"></div>
+
+        <script src="popup.js"></script>
+    </body>
+</html>
