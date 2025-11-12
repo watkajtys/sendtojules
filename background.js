@@ -2,13 +2,23 @@ let capturedHtml = null;
 
 const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
 
+let sourcesCache = null; // Renamed from sourceCache for clarity
+
 function resetState() {
     capturedHtml = null;
     chrome.action.setBadgeText({text: ''});
+    sourcesCache = null;
+    // --- FIX: Consolidate session clearing here ---
+    chrome.storage.session.remove('julesCapturedHtml');
 }
 
 async function fetchSources(apiKey) {
+    if (sourcesCache) {
+        return sourcesCache;
+    }
+
     const sourcesApiUrl = `${API_BASE_URL}/sources`;
+
     let allSources = [];
     let nextPageToken = null;
 
@@ -45,17 +55,14 @@ async function fetchSources(apiKey) {
         } while (nextPageToken);
 
         // Now that we have the complete list, map it for the popup
-        return allSources.map(source => {
-            // e.g., "github/bobalover/boba"
-            const displayName = source.id || source.name;
+        const mappedSources = allSources.map(source => ({
+            id: source.name,   // "sources/github/..."
+            name: source.id    // "github/..."
+        }));
 
-            // Use the 'name' field ("sources/github/...") as the ID
-            // because that is what the 'create session' call needs.
-            return {
-                id: source.name,
-                name: displayName
-            };
-        });
+        // --- Store in cache ---
+        sourcesCache = mappedSources;
+        return mappedSources;
 
     } catch (error) {
         console.error('Failed to fetch sources:', error);
@@ -66,37 +73,59 @@ async function fetchSources(apiKey) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
-
+    // --- FIX: This handler must be async to check storage ---
     if (message.action === 'getPopupData') {
 
-        // 1. Get the state immediately (this is synchronous)
-        const state = capturedHtml ? 'elementCaptured' : 'readyToSelect';
+        // 1. We MUST check session storage, as the in-memory
+        //    'capturedHtml' variable is null if the worker slept.
+        chrome.storage.session.get(['julesCapturedHtml'], (result) => {
+            const storedHtml = result.julesCapturedHtml;
 
-        // 2. Send the state back to the popup *immediately*
-        sendResponse({state: state});
-
-        // 3. *After* sending the state, start the slow
-        chrome.storage.sync.get(['julesApiKey'], async (result) => {
-            if (!result.julesApiKey) {
-                chrome.runtime.sendMessage({action: 'julesError', error: "API Key not set"});
-                return;
+            // 2. Restore the in-memory variable if we found it
+            if (storedHtml) {
+                capturedHtml = storedHtml;
             }
 
-            const sources = await fetchSources(result.julesApiKey);
+            // 3. Now we can safely get the state
+            const state = capturedHtml ? 'elementCaptured' : 'readyToSelect';
 
-            // 4. Send a *new* message to the popup with the sources
-            //    when they are finally ready.
-            chrome.runtime.sendMessage({ action: "sourcesLoaded", sources: sources });
+            // 4. Send the single, immediate response with the state and HTML
+            sendResponse({state: state, capturedHtml: capturedHtml});
         });
 
-        // Return true because we are doing async work
-        // after the initial sendResponse.
+        // 5. The source fetching logic remains separate.
+        //    It will send its own 'sourcesLoaded' message.
+        if (sourcesCache) {
+            // Already cached from pre-fetch, send it now
+            chrome.runtime.sendMessage({ action: "sourcesLoaded", sources: sourcesCache });
+        } else {
+            // Not cached, fetch it now
+            chrome.storage.sync.get(['julesApiKey'], async (result) => {
+                if (!result.julesApiKey) {
+                    chrome.runtime.sendMessage({action: 'julesError', error: "API Key not set"});
+                    return;
+                }
+                const sources = await fetchSources(result.julesApiKey);
+                chrome.runtime.sendMessage({ action: "sourcesLoaded", sources: sources });
+            });
+        }
+
+        // Return true because sendResponse is async (in storage.get)
         return true;
     }
 
     if (message.action === "startSelection") {
 
         resetState();
+
+        // Start fetching sources in the background NOW,
+        // so they're ready when the user opens the popup.
+        chrome.storage.sync.get(['julesApiKey'], async (result) => {
+            if (result.julesApiKey) {
+                // This call will populate the 'sourcesCache'
+                await fetchSources(result.julesApiKey);
+            }
+        });
 
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
             const tabId = tabs[0].id;
@@ -115,6 +144,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "elementCaptured") {
         capturedHtml = message.html;
+        // Also store in session storage to protect against worker sleep
+        chrome.storage.session.set({ 'julesCapturedHtml': message.html });
 
         // Set the "success" badge on the icon.
         chrome.action.setBadgeText({ text: '✅' });
@@ -123,17 +154,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "cancelSelection") {
         resetState();
+
     }
 
     if (message.action === "submitTask") {
-        if (!capturedHtml) {
-            chrome.runtime.sendMessage({action: "julesError", error: "No element captured yet."});
-            return;
-        }
 
         const task = message.task;
         const sourceName = message.repositoryId;
 
+        // Check in-memory first
+        if (!capturedHtml) {
+            // Fallback: Check storage.session in case worker slept
+            chrome.storage.session.get(['julesCapturedHtml'], (result) => {
+                if (result.julesCapturedHtml) {
+                    capturedHtml = result.julesCapturedHtml; // Restore it
+                    // Recurse (call this message handler again)
+                    chrome.runtime.sendMessage(message);
+                } else {
+                    chrome.runtime.sendMessage({action: "julesError", error: "No element captured."});
+                }
+            });
+            return true;
+        }
+
+        // We have the HTML, now get the key and create the session
         chrome.storage.sync.get(['julesApiKey'], (result) => {
             if (!result.julesApiKey) {
                 chrome.runtime.sendMessage({action: "julesError", error: "API Key not set. Please set it in Options."});
@@ -168,10 +212,6 @@ ${capturedHtml}
         prompt: combinedPrompt,
         sourceContext: {
             source: sourceName,
-
-            // --- THIS IS THE FIX ---
-            // We must provide the repo context, as shown in the docs.
-            // We'll default to "main" as the starting branch.
             "githubRepoContext": {
                 "startingBranch": "main"
             }
@@ -180,6 +220,8 @@ ${capturedHtml}
     };
 
     try {
+        console.log("Jules API Payload:", JSON.stringify(payload, null, 2));
+
         const response = await fetch(sessionsApiUrl, {
             method: 'POST',
             headers: {
@@ -201,6 +243,7 @@ ${capturedHtml}
         console.error('Failed to call julesApi api', error);
         chrome.runtime.sendMessage({action: "julesError", error: error.message});
     } finally {
+        // resetState handles all cleanup
         resetState();
     }
 }

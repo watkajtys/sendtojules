@@ -19,7 +19,12 @@
   },
 
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "jules.png"
+  },
+
+  "icons": {
+    "128": "jules.png"
   },
 
   "options_page": "options.html",
