@@ -1,15 +1,14 @@
 // Global state
 let capturedHtml = null;
-let sourcesCache = null;
 
 // Constants
 const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
+const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // --- State Management ---
 
 function resetState() {
     capturedHtml = null;
-    sourcesCache = null;
     chrome.action.setBadgeText({ text: '' });
 
     // Proactively clean up content scripts in the last known tab
@@ -32,8 +31,19 @@ function resetState() {
 // --- API Interaction ---
 
 async function fetchSources(apiKey) {
-    if (sourcesCache) return sourcesCache;
+    // Implements a stale-while-revalidate caching strategy.
 
+    // 1. Immediately send cached data if it exists.
+    chrome.storage.local.get('julesSourcesCache', (result) => {
+        if (result.julesSourcesCache && result.julesSourcesCache.sources) {
+            chrome.runtime.sendMessage({
+                action: "sourcesLoaded",
+                sources: result.julesSourcesCache.sources
+            });
+        }
+    });
+
+    // 2. Always fetch fresh data in the background.
     const sourcesApiUrl = `${API_BASE_URL}/sources`;
     let allSources = [];
     let nextPageToken = null;
@@ -43,34 +53,38 @@ async function fetchSources(apiKey) {
             const url = nextPageToken ? `${sourcesApiUrl}?pageToken=${nextPageToken}` : sourcesApiUrl;
             const response = await fetch(url, {
                 method: 'GET',
-                headers: {
-                    'X-Goog-Api-Key': apiKey,
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'X-Goog-Api-Key': apiKey, 'Content-Type': 'application/json' }
             });
 
-            if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(`API Error ${response.status}: ${errorBody}`);
-            }
+            if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
 
             const data = await response.json();
-            if (data.sources) {
-                allSources.push(...data.sources);
-            }
+            if (data.sources) allSources.push(...data.sources);
             nextPageToken = data.nextPageToken;
         } while (nextPageToken);
 
-        sourcesCache = allSources.map(source => ({
-            id: source.name,
-            name: source.id
-        }));
-        return sourcesCache;
+        const newSources = allSources.map(source => ({ id: source.name, name: source.id }));
 
+        // 3. Get the current cache to compare against.
+        const result = await chrome.storage.local.get('julesSourcesCache');
+        const oldSources = result.julesSourcesCache ? result.julesSourcesCache.sources : null;
+
+        // 4. If data is new, update cache and notify the popup.
+        if (JSON.stringify(oldSources) !== JSON.stringify(newSources)) {
+            await chrome.storage.local.set({
+                julesSourcesCache: { sources: newSources, timestamp: Date.now() }
+            });
+
+            const action = oldSources ? "sourcesRefreshed" : "sourcesLoaded";
+            chrome.runtime.sendMessage({ action: action, sources: newSources });
+        }
     } catch (error) {
         console.error('Failed to fetch sources:', error);
-        chrome.runtime.sendMessage({ action: "julesError", error: "Failed to fetch sources. Check console for details." });
-        return [];
+        // Only propagate error if there's no cached data at all.
+        const result = await chrome.storage.local.get('julesSourcesCache');
+        if (!result.julesSourcesCache) {
+            chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch sources." });
+        }
     }
 }
 
@@ -119,38 +133,32 @@ async function createJulesSession(task, html, sourceName, apiKey) {
 // --- Message Handlers ---
 
 function handleGetPopupData(sendResponse) {
-    chrome.storage.session.get(['julesCapturedHtml'], (result) => {
-        const storedHtml = result.julesCapturedHtml;
-        if (storedHtml) {
-            capturedHtml = storedHtml;
-        }
+    // Send back the current captured state and recent repos
+    chrome.storage.session.get(['julesCapturedHtml'], (sessionResult) => {
+        capturedHtml = sessionResult.julesCapturedHtml || null;
         const state = capturedHtml ? 'elementCaptured' : 'readyToSelect';
-        sendResponse({ state: state, capturedHtml: capturedHtml });
+
+        chrome.storage.local.get({ mostRecentRepos: [] }, (localResult) => {
+            sendResponse({
+                state: state,
+                capturedHtml: capturedHtml,
+                recentRepos: localResult.mostRecentRepos
+            });
+        });
     });
 
-    if (sourcesCache) {
-        chrome.runtime.sendMessage({ action: "sourcesLoaded", sources: sourcesCache });
-    } else {
-        chrome.storage.sync.get(['julesApiKey'], async (result) => {
-            if (!result.julesApiKey) {
-                chrome.runtime.sendMessage({ action: 'julesError', error: "API Key not set" });
-                return;
-            }
-            const sources = await fetchSources(result.julesApiKey);
-            chrome.runtime.sendMessage({ action: "sourcesLoaded", sources: sources });
-        });
-    }
+    // Trigger the stale-while-revalidate source fetch
+    chrome.storage.sync.get(['julesApiKey'], (result) => {
+        if (!result.julesApiKey) {
+            chrome.runtime.sendMessage({ action: 'julesError', error: "API Key not set" });
+            return;
+        }
+        fetchSources(result.julesApiKey); // This function now handles sending messages
+    });
 }
 
 async function handleStartSelection() {
     resetState();
-
-    // Pre-fetch sources
-    chrome.storage.sync.get(['julesApiKey'], async (result) => {
-        if (result.julesApiKey) {
-            await fetchSources(result.julesApiKey);
-        }
-    });
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -158,12 +166,12 @@ async function handleStartSelection() {
 
         chrome.storage.session.set({ 'julesCapturedTabId': tab.id });
 
+        // Inject scripts and start selection
         await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["selector.css"] });
         await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["selector.js"] });
         await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
     } catch (err) {
         console.error("Failed to inject scripts or send message:", err);
-        // Optionally, send an error to the popup
         chrome.runtime.sendMessage({ action: "julesError", error: "Could not start selection on the active tab." });
     }
 }
@@ -175,8 +183,29 @@ function handleElementCaptured(message) {
     chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
 }
 
-function handleSubmitTask(message) {
+async function handleSubmitTask(message) {
     const { task, repositoryId } = message;
+
+    // --- Save to Most Recent ---
+    // We need to find the full source object to save it.
+    const sourcesResult = await chrome.storage.local.get('julesSourcesCache');
+    const allSources = sourcesResult.julesSourcesCache?.sources || [];
+    const selectedSource = allSources.find(s => s.id === repositoryId);
+
+    if (selectedSource) {
+        const recentResult = await chrome.storage.local.get({ mostRecentRepos: [] });
+        let recentRepos = recentResult.mostRecentRepos;
+        // Remove if it already exists to avoid duplicates and move it to the front.
+        recentRepos = recentRepos.filter(r => r.id !== selectedSource.id);
+        recentRepos.unshift(selectedSource);
+        // Keep the list at a max of 3.
+        if (recentRepos.length > 3) {
+            recentRepos.pop();
+        }
+        await chrome.storage.local.set({ mostRecentRepos: recentRepos });
+    }
+    // --- End Save to Most Recent ---
+
 
     const onHtmlReady = (html) => {
         chrome.storage.sync.get(['julesApiKey'], (result) => {
@@ -188,17 +217,14 @@ function handleSubmitTask(message) {
         });
     };
 
-    if (capturedHtml) {
-        onHtmlReady(capturedHtml);
+    // Use the HTML from the global state or try to restore it from session.
+    const htmlToUse = capturedHtml || (await chrome.storage.session.get('julesCapturedHtml')).julesCapturedHtml;
+
+    if (htmlToUse) {
+        capturedHtml = htmlToUse; // Ensure global state is consistent
+        onHtmlReady(htmlToUse);
     } else {
-        chrome.storage.session.get(['julesCapturedHtml'], (result) => {
-            if (result.julesCapturedHtml) {
-                capturedHtml = result.julesCapturedHtml; // Restore
-                onHtmlReady(capturedHtml);
-            } else {
-                chrome.runtime.sendMessage({ action: "julesError", error: "No element captured." });
-            }
-        });
+        chrome.runtime.sendMessage({ action: "julesError", error: "No element captured." });
     }
 }
 

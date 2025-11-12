@@ -134,10 +134,24 @@
             color   : var(--text-secondary);
         }
 
-        #repoResults div:hover {
+        #repoResults div:hover, .highlighted {
             background-color : var(--bg-dropdown-hover);
             color            : var(--text-primary);
         }
+
+        ._jules_repo-header {
+            padding          : 6px 10px;
+            color            : var(--text-secondary);
+            font-size        : 0.75em;
+            font-weight      : bold;
+            text-transform   : uppercase;
+            border-bottom    : 1px solid var(--border-primary);
+            background-color : var(--bg-secondary);
+        }
+        ._jules_repo-header:first-of-type {
+            border-top: 1px solid var(--border-primary);
+        }
+
 
         /* --- NEW/MODIFIED STYLES --- */
         /* Code preview block */
