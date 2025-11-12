@@ -60,7 +60,8 @@
         if (tooltip) {
             const tag = target.tagName.toLowerCase();
             const id = target.id ? `#${target.id}` : '';
-            const classes = target.className ? `.${target.className.split(' ').join('.')}` : '';
+            const classAttr = target.getAttribute('class') || '';
+            const classes = classAttr ? `.${classAttr.split(' ').filter(c => !c.startsWith('_jules_')).join('.')}` : '';
             const dims = `${target.offsetWidth}px x ${target.offsetHeight}px`;
             const hint = `Click to capture`;
 
@@ -90,11 +91,12 @@
         cleanElement.classList.remove('_jules_highlight');
         cleanElement.querySelectorAll('._jules_highlight').forEach(el => el.classList.remove('_jules_highlight'));
 
+        const classAttr = target.getAttribute('class') || '';
         const capturedData = {
             outerHTML: cleanElement.outerHTML,
             tag: target.tagName.toLowerCase(),
             id: target.id,
-            classes: target.className,
+            classes: classAttr.split(' ').filter(c => !c.startsWith('_jules_')).join(' '),
         };
         cleanup();
         chrome.runtime.sendMessage({ action: 'elementCaptured', data: capturedData });
