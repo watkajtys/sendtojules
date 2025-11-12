@@ -10,6 +10,7 @@ function resetState() {
     sourcesCache = null;
     // --- FIX: Consolidate session clearing here ---
     chrome.storage.session.remove('julesCapturedHtml');
+    chrome.storage.session.remove('julesCapturedTabId'); // Clear captured tab ID
 }
 
 async function fetchSources(apiKey) {
@@ -129,11 +130,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
             const tabId = tabs[0].id;
+            chrome.storage.session.set({ 'julesCapturedTabId': tabId }); // Store the tabId in session storage
 
-            chrome.scripting.insertCSS({
-                target: {tabId: tabId},
-                files: ["selector.css"]
-            });
+
 
             chrome.scripting.executeScript({
                 target: {tabId: tabId},
@@ -188,6 +187,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
 
         return true;
+    }
+
+    if (message.action === "popupClosed") {
+        // Retrieve capturedTabId from session storage
+        chrome.storage.session.get(['julesCapturedTabId'], (result) => {
+            const storedTabId = result.julesCapturedTabId;
+            if (storedTabId) {
+                chrome.tabs.sendMessage(storedTabId, { action: "cleanupSelector" });
+            }
+            resetState(); // This will clear julesCapturedTabId from session storage
+        });
+        return true; // Return true because sendResponse is async
     }
 });
 
@@ -244,7 +255,16 @@ ${capturedHtml}
         chrome.runtime.sendMessage({action: "julesError", error: error.message});
     } finally {
         // resetState handles all cleanup
-        resetState();
+        resetState(); // This will now clear julesCapturedTabId from session storage
+
+        // Retrieve capturedTabId from session storage
+        chrome.storage.session.get(['julesCapturedTabId'], (result) => {
+            const storedTabId = result.julesCapturedTabId;
+            if (storedTabId) {
+                chrome.tabs.sendMessage(storedTabId, { action: "cleanupSelector" });
+                // No need to clear here, resetState() already does it
+            }
+        });
     }
 }
 

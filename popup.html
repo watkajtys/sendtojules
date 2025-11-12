@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Send To Jules</title>
+
     <style>
         /* ... (your full dark-mode style block) ... */
         :root {
@@ -23,6 +24,24 @@
             --toast-text-primary   : rgb(255, 255, 255);
             --toast-text-secondary : rgb(160, 157, 166);
             --toast-icon-color     : rgb(117, 95, 204);
+        }
+
+        /* Spinner CSS */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid var(--button-primary-bg);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: none; /* Hidden by default */
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         body {
@@ -194,6 +213,31 @@
             color      : var(--text-secondary);
         }
 
+        .error-message {
+            color: var(--text-error);
+            font-weight: bold;
+        }
+
+        .repo-search-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .clear-repo-selection {
+            position: absolute;
+            right: 8px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: bold;
+            font-size: 0.9em;
+            display: none; /* Hidden by default */
+        }
+
+        .clear-repo-selection:hover {
+            color: var(--text-primary);
+        }
+
         /* Hide the 'Start Over' button from the old design */
         #startOver {
             display : none;
@@ -208,8 +252,11 @@
 </div>
 
 <div id="taskView" style="display: none;">
-    <label for="repoSearch">Repository</label>
-    <input type="text" id="repoSearch" placeholder="Loading repositories...">
+    <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
+    <div class="repo-search-container">
+        <input type="text" id="repoSearch" placeholder="Loading repositories...">
+        <span id="clearRepoSelection" class="clear-repo-selection">✖</span>
+    </div>
     <div id="repoResults"></div>
     <input type="hidden" id="selectedRepo" value="">
 
@@ -217,9 +264,9 @@
     <textarea id="taskPrompt" placeholder="Examine this element"></textarea>
 
     <label>Selected Element (Preview)</label>
-    <pre id="codePreview"><code>No element selected.</code></pre>
+    <pre id="codePreview"><code class="language-xml">No element selected.</code></pre>
 
-    <button id="submitTask">2. Submit to Jules</button>
+    <button id="submitTask">2. Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
     <button id="reselect">Reselect Element</button>
 </div>
 
@@ -237,6 +284,7 @@
 <button id="startOver" style="display: none;">Start Over</button>
 
 <div id="status"></div>
+
 <script src="popup.js"></script>
 </body>
 </html>

@@ -9,12 +9,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    chrome.storage.sync.get(['julesApiKey'], (result) => {
-        if (result.julesApiKey) {
-            apiKeyInput.value = result.julesApiKey;
-        }
-    });
-
     saveButton.addEventListener("click", () => {
         const apiKey = apiKeyInput.value;
 

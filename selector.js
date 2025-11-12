@@ -1,4 +1,10 @@
 (function() {
+    // Check if selector is already active
+    if (window.__julesSelectorActive) {
+        console.warn("Jules selector already active on this page. Preventing re-injection.");
+        return; // Exit if already active
+    }
+    window.__julesSelectorActive = true; // Set flag
 
     let tooltip;
     let breadcrumb;
@@ -162,9 +168,24 @@
         highlighted.forEach(el => {
             el.classList.remove('_jules_highlight');
         });
+
+        // Unset the global flag when cleanup is complete
+        window.__julesSelectorActive = false;
     }
 
     // --- 3. Attach all event listeners ---
+
+    // Add a listener for messages from the background script
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message.action === "cleanupSelector") {
+            cleanup();
+        }
+    });
+
+    // Add a listener for page unload to ensure cleanup
+    window.addEventListener('beforeunload', () => {
+        cleanup();
+    });
 
     createUI();
     document.addEventListener('mouseover', onMouseOver);
