@@ -1,5 +1,5 @@
 // Global state
-let capturedHtml = null;
+let capturedData = null;
 let sourcesCache = null;
 
 // Constants
@@ -8,7 +8,7 @@ const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
 // --- State Management ---
 
 function resetState() {
-    capturedHtml = null;
+    capturedData = null;
     sourcesCache = null;
     chrome.action.setBadgeText({ text: '' });
 
@@ -26,7 +26,7 @@ function resetState() {
     });
 
     // Clear all session data
-    chrome.storage.session.remove(['julesCapturedHtml', 'julesCapturedTabId']);
+    chrome.storage.session.remove(['julesCapturedData', 'julesCapturedTabId']);
 }
 
 // --- API Interaction ---
@@ -74,10 +74,20 @@ async function fetchSources(apiKey) {
     }
 }
 
-async function createJulesSession(task, html, sourceName, apiKey) {
+async function createJulesSession(task, capturedElement, sourceName, apiKey) {
     const sessionsApiUrl = `${API_BASE_URL}/sessions`;
     const cleanTask = task.trim();
-    const combinedPrompt = `${cleanTask}\n\nHere is the HTML context for the element I selected:\n\`\`\`html\n${html}\n\`\`\``;
+
+    // Construct a more detailed context string
+    let elementDetails = `Tag: <${capturedElement.tag}>`;
+    if (capturedElement.id) {
+        elementDetails += `, ID: #${capturedElement.id}`;
+    }
+    if (capturedElement.classes) {
+        elementDetails += `, Classes: .${capturedElement.classes.split(' ').join('.')}`;
+    }
+
+    const combinedPrompt = `${cleanTask}\n\nHere is the context for the element I selected:\n- Element Details: ${elementDetails}\n- HTML Snippet:\n\`\`\`html\n${capturedElement.html}\n\`\`\``;
     const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
 
     const payload = {
@@ -119,13 +129,13 @@ async function createJulesSession(task, html, sourceName, apiKey) {
 // --- Message Handlers ---
 
 function handleGetPopupData(sendResponse) {
-    chrome.storage.session.get(['julesCapturedHtml'], (result) => {
-        const storedHtml = result.julesCapturedHtml;
-        if (storedHtml) {
-            capturedHtml = storedHtml;
+    chrome.storage.session.get(['julesCapturedData'], (result) => {
+        const storedData = result.julesCapturedData;
+        if (storedData) {
+            capturedData = storedData;
         }
-        const state = capturedHtml ? 'elementCaptured' : 'readyToSelect';
-        sendResponse({ state: state, capturedHtml: capturedHtml });
+        const state = capturedData ? 'elementCaptured' : 'readyToSelect';
+        sendResponse({ state: state, capturedHtml: capturedData ? capturedData.html : null });
     });
 
     if (sourcesCache) {
@@ -169,8 +179,8 @@ async function handleStartSelection() {
 }
 
 function handleElementCaptured(message) {
-    capturedHtml = message.html;
-    chrome.storage.session.set({ 'julesCapturedHtml': message.html });
+    capturedData = message.data;
+    chrome.storage.session.set({ 'julesCapturedData': message.data });
     chrome.action.setBadgeText({ text: '✅' });
     chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
 }
@@ -178,23 +188,23 @@ function handleElementCaptured(message) {
 function handleSubmitTask(message) {
     const { task, repositoryId } = message;
 
-    const onHtmlReady = (html) => {
+    const onDataReady = (data) => {
         chrome.storage.sync.get(['julesApiKey'], (result) => {
             if (!result.julesApiKey) {
                 chrome.runtime.sendMessage({ action: "julesError", error: "API Key not set. Please set it in Options." });
                 return;
             }
-            createJulesSession(task, html, repositoryId, result.julesApiKey);
+            createJulesSession(task, data, repositoryId, result.julesApiKey);
         });
     };
 
-    if (capturedHtml) {
-        onHtmlReady(capturedHtml);
+    if (capturedData) {
+        onDataReady(capturedData);
     } else {
-        chrome.storage.session.get(['julesCapturedHtml'], (result) => {
-            if (result.julesCapturedHtml) {
-                capturedHtml = result.julesCapturedHtml; // Restore
-                onHtmlReady(capturedHtml);
+        chrome.storage.session.get(['julesCapturedData'], (result) => {
+            if (result.julesCapturedData) {
+                capturedData = result.julesCapturedData; // Restore
+                onDataReady(capturedData);
             } else {
                 chrome.runtime.sendMessage({ action: "julesError", error: "No element captured." });
             }

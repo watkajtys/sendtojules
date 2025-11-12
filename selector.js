@@ -58,10 +58,14 @@
         const fullSelector = getSelector(target);
         if (breadcrumb) breadcrumb.textContent = fullSelector;
         if (tooltip) {
-            const components = fullSelector.split(' > ');
-            const truncated = components.slice(-2).join(' > ');
+            const tag = target.tagName.toLowerCase();
+            const id = target.id ? `#${target.id}` : '';
+            const classes = target.className ? `.${target.className.split(' ').join('.')}` : '';
             const dims = `${target.offsetWidth}px x ${target.offsetHeight}px`;
-            tooltip.innerHTML = `<div>${truncated}</div><div>${dims}</div>`;
+
+            const info = `<strong>${tag}${id}${classes}</strong> (${dims})`;
+            const hint = '<em>Click to capture</em>';
+            tooltip.innerHTML = `<div>${info}</div><div>${hint}</div>`;
             tooltip.style.left = (event.pageX + 15) + 'px';
             tooltip.style.top = (event.pageY + 15) + 'px';
         }
@@ -74,12 +78,21 @@
     function onClick(event) {
         event.preventDefault();
         event.stopPropagation();
-        const cleanElement = event.target.cloneNode(true);
+        const target = event.target;
+
+        const cleanElement = target.cloneNode(true);
         cleanElement.classList.remove('_jules_highlight');
         cleanElement.querySelectorAll('._jules_highlight').forEach(el => el.classList.remove('_jules_highlight'));
-        const capturedHtml = cleanElement.outerHTML;
+
+        const capturedData = {
+            html: cleanElement.outerHTML,
+            tag: target.tagName.toLowerCase(),
+            id: target.id || '',
+            classes: target.className || ''
+        };
+
         cleanup();
-        chrome.runtime.sendMessage({ action: 'elementCaptured', html: capturedHtml });
+        chrome.runtime.sendMessage({ action: 'elementCaptured', data: capturedData });
     }
 
     function onKeyDown(event) {
