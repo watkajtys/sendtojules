@@ -228,10 +228,17 @@
             position: absolute;
             right: 8px;
             cursor: pointer;
-            color: var(--text-secondary);
-            font-weight: bold;
-            font-size: 0.9em;
+            width: 16px;
+            height: 16px;
             display: none; /* Hidden by default */
+        }
+
+        .clear-repo-selection:hover {
+            opacity: 0.8;
+        }
+
+        #resultView-icon {
+            filter: invert(65%) sepia(35%) saturate(588%) hue-rotate(253deg) brightness(82%) contrast(85%);
         }
 
         .clear-repo-selection:hover {
@@ -255,7 +262,7 @@
     <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
     <div class="repo-search-container">
         <input type="text" id="repoSearch" placeholder="Loading repositories...">
-        <span id="clearRepoSelection" class="clear-repo-selection">✖</span>
+        <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
     </div>
     <div id="repoResults"></div>
     <input type="hidden" id="selectedRepo" value="">
@@ -271,9 +278,7 @@
 </div>
 
 <div id="resultView">
-    <svg id="resultView-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-        <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clip-rule="evenodd" />
-    </svg>
+    <img src="icons/success.svg" id="resultView-icon" />
     <div id="resultView-text">
         <p id="resultTitle">Task created!</p>
         <p id="resultSubtitle">Background task in progress</p>
