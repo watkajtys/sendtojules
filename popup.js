@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State ---
     let allSources = [];
+    let recentRepos = [];
     let highlightedRepoIndex = -1;
 
     // --- View Management ---
@@ -62,26 +63,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Repo Search Logic ---
-    function populateRepoResults(sources) {
+    function populateRepoResults(filteredSources) {
         ui.repoResults.innerHTML = '';
         highlightedRepoIndex = -1;
-        if (sources.length === 0) {
-            ui.repoResults.innerHTML = '<div class="_jules_no-match">No matches</div>';
-            return;
-        }
-        sources.forEach((source, index) => {
+        let currentIndex = 0;
+
+        const createItem = (source) => {
             const item = document.createElement('div');
             item.className = '_jules_repo-item';
             item.textContent = source.name;
             item.dataset.id = source.id;
-            item.dataset.index = index;
+            item.dataset.index = currentIndex++;
             item.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 selectRepoItem(item);
             });
-            ui.repoResults.appendChild(item);
-        });
+            return item;
+        };
+
+        const createHeader = (title) => {
+            const header = document.createElement('div');
+            header.className = '_jules_repo-header';
+            header.textContent = title;
+            return header;
+        };
+
+        // Filter out recent repos from the main list to avoid duplication
+        const recentIds = new Set(recentRepos.map(r => r.id));
+        const nonRecentSources = filteredSources.filter(s => !recentIds.has(s.id));
+        const query = ui.inputs.repoSearch.value.toLowerCase();
+
+        // Show recents only when the search is empty
+        if (query === '' && recentRepos.length > 0) {
+            ui.repoResults.appendChild(createHeader('Recently Used'));
+            recentRepos.forEach(repo => ui.repoResults.appendChild(createItem(repo)));
+            if (nonRecentSources.length > 0) {
+                 ui.repoResults.appendChild(createHeader('All Repositories'));
+            }
+        }
+
+        // Add the filtered list of all sources
+        if (nonRecentSources.length > 0) {
+            nonRecentSources.forEach(source => ui.repoResults.appendChild(createItem(source)));
+        }
+
+        // Handle no results case
+        if (ui.repoResults.children.length === 0) {
+            ui.repoResults.innerHTML = '<div class="_jules_no-match">No matches</div>';
+        }
     }
+
 
     function selectRepoItem(item) {
         ui.inputs.repoSearch.value = item.textContent;
@@ -200,16 +231,22 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.runtime.onMessage.addListener((message) => {
             switch (message.action) {
                 case "sourcesLoaded":
+                case "sourcesRefreshed":
                     toggleSpinner('repo', false);
                     allSources = message.sources || [];
+
                     if (allSources.length > 0) {
-                        ui.inputs.repoSearch.placeholder = "Search for a source...";
+                        ui.inputs.repoSearch.placeholder = "Search for a repository...";
                         ui.inputs.repoSearch.disabled = false;
-                        populateRepoResults(allSources);
                     } else {
-                        ui.inputs.repoSearch.placeholder = "No sources found";
+                        ui.inputs.repoSearch.placeholder = "No repositories found";
                         ui.inputs.repoSearch.disabled = true;
                     }
+
+                    // Repopulate with the latest list, preserving any search query
+                    const currentQuery = ui.inputs.repoSearch.value.toLowerCase();
+                    const filtered = allSources.filter(s => s.name.toLowerCase().includes(currentQuery));
+                    populateRepoResults(filtered);
                     break;
 
                 case "julesResponse":
@@ -247,12 +284,19 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.runtime.sendMessage({ action: "getPopupData" }, (response) => {
             if (chrome.runtime.lastError) {
                 setStatus("Error communicating with background.", true);
+                toggleSpinner('repo', false);
                 return;
             }
+
+            recentRepos = response.recentRepos || [];
 
             if (response.state === 'elementCaptured') {
                 ui.codePreview.querySelector('code').textContent = response.capturedHtml || 'No HTML captured.';
                 switchView('task');
+                // Initial population of results if sources are already cached
+                if (allSources.length > 0) {
+                     populateRepoResults(allSources);
+                }
             } else {
                 switchView('select');
             }
