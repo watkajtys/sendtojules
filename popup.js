@@ -496,6 +496,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function timeAgo(date) {
+        const now = new Date();
+        const seconds = Math.round((now - date) / 1000);
+        const minutes = Math.round(seconds / 60);
+        const hours = Math.round(minutes / 60);
+        const days = Math.round(hours / 24);
+        const weeks = Math.round(days / 7);
+        const months = Math.round(days / 30.44); // Average month length
+        const years = Math.round(days / 365.25); // Account for leap years
+
+        if (seconds < 60) return `${seconds}s ago`;
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return days === 1 ? 'yesterday' : `${days}d ago`;
+        if (weeks < 5) return `${weeks}w ago`;
+        if (months < 12) return `${months}mo ago`;
+        return `${years}y ago`;
+    }
+
     function renderHistory(history, isFromCache) {
         ui.historyList.innerHTML = '';
 
@@ -512,6 +531,9 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = 'history-card';
             const status = session.state || 'UNKNOWN';
             const repoName = session.sourceContext?.source.split('/').slice(-2).join('/') || 'N/A';
+            const branchName = session.sourceContext?.githubRepoContext?.startingBranch || 'main';
+            const creationDate = session.createTime ? new Date(session.createTime) : new Date();
+            const time = timeAgo(creationDate);
 
             card.innerHTML = `
                 <a href="https://jules.google.com/session/${session.id}" target="_blank" class="history-link">
@@ -519,7 +541,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="history-card-title">${session.title}</span>
                         <span class="history-card-status status-${status.toLowerCase()}">${status}</span>
                     </div>
-                    <div class="history-card-repo">${repoName}</div>
+                    <div class="history-card-repo">
+                        <span>${repoName} (${branchName})</span>
+                        <span class="history-card-time">${time}</span>
+                    </div>
                 </a>
             `;
             fragment.appendChild(card);
