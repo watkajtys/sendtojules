@@ -212,6 +212,54 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
     }
 }
 
+async function fetchHistory(apiKey) {
+    // 1. Immediately send cached data if it exists and is not expired.
+    chrome.storage.local.get('julesHistoryCache', (result) => {
+        if (result.julesHistoryCache && (Date.now() - result.julesHistoryCache.timestamp < CACHE_DURATION_MS)) {
+            chrome.runtime.sendMessage({
+                action: "historyLoaded",
+                history: result.julesHistoryCache.history
+            });
+        }
+    });
+
+    // 2. Always fetch fresh data in the background.
+    const sessionsApiUrl = `${API_BASE_URL}/sessions?pageSize=5`;
+    try {
+        const response = await fetch(sessionsApiUrl, {
+            method: 'GET',
+            headers: { 'X-Goog-Api-Key': apiKey, 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Error ${response.status}: ${await response.text()}`);
+        }
+
+        const data = await response.json();
+        const newHistory = data.sessions;
+
+        // 3. Get the current cache to compare against.
+        const result = await chrome.storage.local.get('julesHistoryCache');
+        const oldHistory = result.julesHistoryCache ? result.julesHistoryCache.history : null;
+
+        // 4. If data is new, update cache and notify the popup.
+        if (JSON.stringify(oldHistory) !== JSON.stringify(newHistory)) {
+            await chrome.storage.local.set({
+                julesHistoryCache: { history: newHistory, timestamp: Date.now() }
+            });
+
+            const action = oldHistory ? "historyRefreshed" : "historyLoaded";
+            chrome.runtime.sendMessage({ action: action, history: newHistory });
+        }
+    } catch (error) {
+        console.error('Failed to fetch session history:', error);
+        const result = await chrome.storage.local.get('julesHistoryCache');
+        if (!result.julesHistoryCache) {
+            chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
+        }
+    }
+}
+
 
 // --- Message Handlers ---
 
@@ -505,6 +553,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'toggleCSSCapture':
             handleToggleCSSCapture(message);
             break;
+        case 'fetchHistory':
+            chrome.storage.sync.get(['julesApiKey'], (result) => {
+                if (!result.julesApiKey) {
+                    chrome.runtime.sendMessage({ action: 'julesError', error: "API Key not set" });
+                    return;
+                }
+                fetchHistory(result.julesApiKey);
+            });
+            return true;
     }
 });
 
