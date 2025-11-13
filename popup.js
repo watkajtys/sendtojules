@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previews: {
             code: document.getElementById('codePreview'),
             css: document.getElementById('cssPreview'),
+            selector: document.getElementById('selectorPreview'),
         },
         explanations: {
             log: document.getElementById('logExplanation'),
@@ -384,6 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.state === 'elementCaptured' && response.capturedHtml) {
                 ui.previews.code.querySelector('code').textContent = response.capturedHtml;
+                ui.previews.selector.querySelector('code').textContent = response.capturedSelector || 'No selector captured.';
                 ui.containers.cssCapture.style.display = 'block';
 
                 const isCapturingCSS = response.isCapturingCSS ?? false; // Default to false

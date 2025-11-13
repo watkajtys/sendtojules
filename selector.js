@@ -63,25 +63,35 @@
     }
 
     function getSelector(el) {
-        if (!el) return '';
-        let path = [];
+        if (!el || !(el instanceof Element)) return '';
+        const path = [];
         while (el.nodeType === Node.ELEMENT_NODE) {
             let selector = el.nodeName.toLowerCase();
             if (el.id) {
-                selector += '#' + el.id;
-                path.unshift(selector);
-                break;
-            } else {
-                let sib = el, nth = 1;
-                while (sib = sib.previousElementSibling) {
-                    if (sib.nodeName.toLowerCase() === selector) nth++;
-                }
-                if (nth !== 1) selector += `:nth-of-type(${nth})`;
+                selector += `#${el.id}`;
             }
+
+            const classList = Array.from(el.classList).filter(c => c && !c.startsWith('_jules_'));
+            if (classList.length > 0) {
+                selector += `.${classList.join('.')}`;
+            }
+
+            let sib = el, nth = 1;
+            while (sib = sib.previousElementSibling) {
+                if (sib.nodeName.toLowerCase() === el.nodeName.toLowerCase()) {
+                    nth++;
+                }
+            }
+
+            if (nth !== 1) {
+                selector += `:nth-of-type(${nth})`;
+            }
+
             path.unshift(selector);
+            if (el.tagName.toLowerCase() === 'html') break;
             el = el.parentNode;
         }
-        return path.join(" > ");
+        return path.join(' > ');
     }
 
     function onMouseOver(event) {
@@ -134,6 +144,7 @@
 
         const capturedData = {
             outerHTML: cleanElement.outerHTML,
+            selector: getSelector(target),
             tag: target.tagName.toLowerCase(),
             id: target.id,
             classes: classAttr.split(' ').filter(c => !c.startsWith('_jules_') && c).join(' '),
