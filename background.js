@@ -105,7 +105,10 @@ async function createJulesSession(task, data, sourceName, apiKey) {
     const payload = {
         prompt: prompt,
         sourceContext: {
-            source: sourceName
+            source: sourceName,
+            githubRepoContext: {
+                startingBranch: ""
+            }
         },
         title: simpleTitle
     };
