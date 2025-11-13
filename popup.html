@@ -2,8 +2,12 @@
 <html>
 <head>
     <title>Send To Jules</title>
-
     <style>
+        @font-face {
+            font-family: 'Google Sans Code';
+            src: url('fonts/GoogleSansCode[wght].ttf') format('truetype');
+            font-weight: 100 900; /* Adjust range as needed */
+        }
         /* ... (your full dark-mode style block) ... */
         :root {
             --bg-primary           : rgb(25 26 31);
@@ -132,6 +136,7 @@
             padding : 8px 10px;
             cursor  : pointer;
             color   : var(--text-secondary);
+            font-family: "Google Sans Code", monospace;
         }
 
         #repoResults div:hover, .highlighted {
@@ -155,7 +160,7 @@
 
         /* --- NEW/MODIFIED STYLES --- */
         /* Code preview block */
-        #codePreview {
+        #codePreview, #cssPreview {
             background-color : var(--bg-secondary);
             color            : var(--text-secondary);
             border           : 1px solid var(--border-primary);
@@ -167,6 +172,7 @@
             word-break       : break-all;
             white-space      : pre-wrap;
             margin-top       : 10px;
+            font-family: "Google Sans Code", monospace;
         }
 
         /* Result view styles */
