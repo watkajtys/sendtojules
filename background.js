@@ -217,7 +217,7 @@ async function handleGetPopupData(sendResponse) {
             mostRecentRepos: [],
             isCapturingLogs: false,
             isCapturingNetwork: false,
-            isCapturingCSS: true,
+            isCapturingCSS: false,
         });
 
         sendResponse({
@@ -297,7 +297,7 @@ async function handleSubmitTask(message) {
             return;
         }
 
-        const { isCapturingCSS } = await chrome.storage.local.get({ isCapturingCSS: true });
+        const { isCapturingCSS } = await chrome.storage.local.get({ isCapturingCSS: false });
         await createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs, isCapturingCSS);
 
         // Important: Reset the debugger state after logs are sent.

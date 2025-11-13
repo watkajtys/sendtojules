@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ui.previews.code.querySelector('code').textContent = response.capturedHtml;
                 ui.containers.cssCapture.style.display = 'block';
 
-                const isCapturingCSS = response.isCapturingCSS ?? true; // Default to true
+                const isCapturingCSS = response.isCapturingCSS ?? false; // Default to false
                 ui.toggles.captureCSS.checked = isCapturingCSS;
 
                 // Format and display the captured CSS
