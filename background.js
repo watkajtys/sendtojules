@@ -556,11 +556,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 chrome.debugger.onDetach.addListener(async (source, reason) => {
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (source.tabId === debuggingTabId) {
-        console.log(`Jules debugger detached from tab ${source.tabId}. Reason: ${reason}. Cleaning up state.`);
-        // This is the central cleanup location.
-        // It runs when the user closes the banner, or we call detach().
+        console.log(`Jules debugger detached from tab ${source.tabId}. Reason: ${reason}. Cleaning up session state.`);
+        // This is the central cleanup location. It runs whenever the debugger is detached for any reason.
         // We only clear the debuggingTabId, preserving the toggle states (isCapturingLogs, isCapturingNetwork)
-        // so the UI remains consistent.
+        // so the UI remains consistent with the user's intent.
         await chrome.storage.local.remove('debuggingTabId');
         capturedLogs = [];
         capturedNetworkActivity = [];
