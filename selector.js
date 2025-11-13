@@ -3,6 +3,42 @@
     if (window.hasOwnProperty('__julesSelectorActive')) {
         return; // A script has already been injected and is listening.
     }
+
+    const CSS_PROPERTIES_TO_CAPTURE = [
+        'font-family', 'font-size', 'font-weight', 'color', 'background-color',
+        'padding', 'margin', 'border', 'display', 'position', 'top', 'left',
+        'right', 'bottom', 'width', 'height', 'opacity', 'z-index', 'line-height'
+    ];
+
+    function getComputedCss(element) {
+        const computedStyles = {};
+        const pseudoStates = ['hover', 'active'];
+
+        // --- Helper to get styles for a given state ---
+        const getStylesForState = (el, pseudo = null) => {
+            const style = window.getComputedStyle(el, pseudo ? `:${pseudo}` : null);
+            const props = {};
+            for (const prop of CSS_PROPERTIES_TO_CAPTURE) {
+                const value = style.getPropertyValue(prop);
+                if (value) { // Only add if a value is found
+                    props[prop] = value;
+                }
+            }
+            return props;
+        };
+
+        // --- Capture styles ---
+        computedStyles.default = getStylesForState(element);
+        pseudoStates.forEach(state => {
+            const pseudoStyles = getStylesForState(element, state);
+            // Only add pseudo-class styles if they differ from the default
+            if (JSON.stringify(pseudoStyles) !== JSON.stringify(computedStyles.default)) {
+                computedStyles[state] = pseudoStyles;
+            }
+        });
+
+        return computedStyles;
+    }
     window.__julesSelectorActive = false; // Set initial state to inactive.
 
     let tooltip;
@@ -98,6 +134,7 @@
             tag: target.tagName.toLowerCase(),
             id: target.id,
             classes: classAttr.split(' ').filter(c => !c.startsWith('_jules_') && c).join(' '),
+            computedCss: getComputedCss(target), // Capture the computed CSS
         };
         cleanup();
         chrome.runtime.sendMessage({ action: 'elementCaptured', data: capturedData });
