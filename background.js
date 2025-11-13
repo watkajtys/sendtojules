@@ -439,14 +439,22 @@ async function handleToggleLogCapture(message) {
     const { enabled } = message;
     await chrome.storage.local.set({ isCapturingLogs: enabled });
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) await manageDebuggerState(tab.id);
+    if (tab && tab.url && !tab.url.startsWith('chrome://')) {
+        await manageDebuggerState(tab.id);
+    } else {
+        console.warn("Jules: Debugger cannot be attached to the current tab.");
+    }
 }
 
 async function handleToggleNetworkCapture(message) {
     const { enabled } = message;
     await chrome.storage.local.set({ isCapturingNetwork: enabled });
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) await manageDebuggerState(tab.id);
+    if (tab && tab.url && !tab.url.startsWith('chrome://')) {
+        await manageDebuggerState(tab.id);
+    } else {
+        console.warn("Jules: Debugger cannot be attached to the current tab.");
+    }
 }
 
 async function handleToggleCSSCapture(message) {
