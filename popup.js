@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         buttons: {
             select: document.getElementById('selectElement'),
+            createTaskWithoutSelection: document.getElementById('createTaskWithoutSelection'),
             submit: document.getElementById('submitTask'),
             reselect: document.getElementById('reselect'),
             startOver: document.getElementById('startOver'),
@@ -138,6 +139,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.buttons.select.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "startSelection" });
             window.close();
+        });
+
+        ui.buttons.createTaskWithoutSelection.addEventListener('click', () => {
+            // No element is selected, so we clear any lingering state
+            // and switch directly to the task submission view.
+            chrome.runtime.sendMessage({ action: "cancelSelection" }); // Resets background state
+            ui.codePreview.querySelector('code').textContent = 'No element selected.';
+            switchView('task');
         });
 
         ui.buttons.reselect.addEventListener('click', () => {
