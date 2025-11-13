@@ -1,7 +1,9 @@
 // Global state
 let capturedData = null;
-let debuggingTabId = null;
 let capturedLogs = [];
+
+// Debugging state is now managed in chrome.storage.local
+// { debuggingTabId: number | null }
 
 // Constants
 const DEBUGGER_VERSION = "1.3";
@@ -31,16 +33,20 @@ function resetState() {
     chrome.storage.session.remove(['julesCapturedData', 'julesCapturedTabId']);
 }
 
-function resetDebuggerState() {
+async function resetDebuggerState() {
+    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (debuggingTabId) {
-        chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
-            if (!err.message.includes("No debugger with given target id")) {
-                 console.error("Error detaching debugger:", err);
+        await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
+            // Ignore errors if the debugger is already detached (e.g., by DevTools)
+            if (!err.message.includes("No debugger with given target id") &&
+                !err.message.includes("Target is not attached")) {
+                console.error("Error detaching debugger:", err);
             }
         });
     }
-    debuggingTabId = null;
+    await chrome.storage.local.remove('debuggingTabId');
     capturedLogs = [];
+    console.log("Jules debugger state reset.");
 }
 
 
@@ -163,21 +169,26 @@ async function createJulesSession(task, data, sourceName, apiKey, logs) {
 
 // --- Message Handlers ---
 
-function handleGetPopupData(sendResponse) {
-    // Send back the current captured state and recent repos
-    chrome.storage.session.get(['julesCapturedData'], (sessionResult) => {
+async function handleGetPopupData(sendResponse) {
+    // This function is now async to handle storage calls cleanly.
+    try {
+        const sessionResult = await chrome.storage.session.get(['julesCapturedData']);
         capturedData = sessionResult.julesCapturedData || null;
         const state = capturedData ? 'elementCaptured' : 'readyToSelect';
 
-        chrome.storage.local.get({ mostRecentRepos: [] }, (localResult) => {
-            sendResponse({
-                state: state,
-                capturedHtml: capturedData ? capturedData.outerHTML : null, // For popup display
-                recentRepos: localResult.mostRecentRepos,
-                isLogging: !!debuggingTabId
-            });
+        const localResult = await chrome.storage.local.get({ mostRecentRepos: [], debuggingTabId: null });
+
+        sendResponse({
+            state: state,
+            capturedHtml: capturedData ? capturedData.outerHTML : null,
+            recentRepos: localResult.mostRecentRepos,
+            isLogging: !!localResult.debuggingTabId
         });
-    });
+    } catch (error) {
+        console.error("Error getting popup data:", error);
+        // It's good practice to still send a response in case of error.
+        sendResponse({ error: "Failed to retrieve initial data." });
+    }
 
     // Trigger the stale-while-revalidate source fetch
     chrome.storage.sync.get(['julesApiKey'], (result) => {
@@ -233,43 +244,47 @@ async function handleSubmitTask(message) {
     }
     // --- End Save to Most Recent ---
 
-    const onDataReady = (data) => {
-        chrome.storage.sync.get(['julesApiKey'], (result) => {
-            if (!result.julesApiKey) {
-                chrome.runtime.sendMessage({ action: "julesError", error: "API Key not set. Please set it in Options." });
-                return;
-            }
-            // Pass the captured logs to the session creation function
-            createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs);
+    const onDataReady = async (data) => {
+        const result = await chrome.storage.sync.get(['julesApiKey']);
+        if (!result.julesApiKey) {
+            chrome.runtime.sendMessage({ action: "julesError", error: "API Key not set. Please set it in Options." });
+            return;
+        }
+        // Pass the captured logs to the session creation function
+        await createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs);
 
-            // Important: Reset the debugger state after logs are sent.
-            resetDebuggerState();
-        });
+        // Important: Reset the debugger state after logs are sent.
+        await resetDebuggerState();
     };
 
     const dataToUse = capturedData || (await chrome.storage.session.get('julesCapturedData')).julesCapturedData;
 
     // The logic now allows dataToUse to be null for tasks without element selection.
     // The createJulesSession function is now responsible for handling the null case.
-    onDataReady(dataToUse);
+    await onDataReady(dataToUse);
 }
 
 // --- Debugger Logic ---
 
 function onDebuggerEvent(debuggeeId, method, params) {
-    if (method === 'Runtime.consoleAPICalled') {
-        const logEntry = {
-            timestamp: new Date(params.timestamp).toISOString(),
-            level: params.type,
-            // We need to handle the array of remote objects properly
-            message: params.args.map(arg => {
-                 if (arg.type === 'string') return arg.value;
-                 // For objects, 'description' is often the most useful summary
-                 return arg.description || JSON.stringify(arg.value) || 'Unserializable object';
-            }).join(' ') // Join arguments with a space, like the console does
-        };
-        capturedLogs.push(logEntry);
-    }
+    // Check storage to ensure we are only logging the correct tab.
+    chrome.storage.local.get('debuggingTabId', ({ debuggingTabId }) => {
+        if (!debuggingTabId || debuggeeId.tabId !== debuggingTabId) {
+            return;
+        }
+
+        if (method === 'Runtime.consoleAPICalled') {
+            const logEntry = {
+                timestamp: new Date(params.timestamp).toISOString(),
+                level: params.type,
+                message: params.args.map(arg => {
+                    if (arg.type === 'string') return arg.value;
+                    return arg.description || JSON.stringify(arg.value) || 'Unserializable object';
+                }).join(' ')
+            };
+            capturedLogs.push(logEntry);
+        }
+    });
 }
 
 async function handleToggleLogCapture(message) {
@@ -278,20 +293,24 @@ async function handleToggleLogCapture(message) {
     if (enabled) {
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) return;
+            if (!tab || !tab.id) return;
 
-            debuggingTabId = tab.id;
-            await chrome.debugger.attach({ tabId: debuggingTabId }, DEBUGGER_VERSION);
-            await chrome.debugger.sendCommand({ tabId: debuggingTabId }, 'Runtime.enable');
-            chrome.debugger.onEvent.addListener(onDebuggerEvent);
+            // Important: Attach the debugger *before* setting state,
+            // so that our onDetach listener can clean up correctly if attach fails.
+            await chrome.debugger.attach({ tabId: tab.id }, DEBUGGER_VERSION);
+            await chrome.storage.local.set({ debuggingTabId: tab.id });
+            console.log("Jules debugger attached to tab:", tab.id);
+
+            // Enable the runtime domain to receive console events
+            await chrome.debugger.sendCommand({ tabId: tab.id }, 'Runtime.enable');
 
         } catch (err) {
             console.error("Error attaching debugger:", err);
             chrome.runtime.sendMessage({ action: "julesError", error: `Failed to start debugger: ${err.message}` });
-            resetDebuggerState();
+            await resetDebuggerState(); // Ensure cleanup on failure
         }
     } else {
-        resetDebuggerState();
+        await resetDebuggerState();
     }
 }
 
@@ -315,8 +334,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             handleSubmitTask(message);
             return true;
         case 'popupClosed':
-            resetState(); // Simplified: reset state handles cleanup
-            resetDebuggerState();
+            // We no longer reset the debugger state when the popup closes.
+            // It now persists until the task is submitted or the tab is closed.
+            resetState();
             break;
         case 'toggleLogCapture':
             handleToggleLogCapture(message);
@@ -324,23 +344,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Reset state when the user switches tabs
+// Reset element selection state when the user switches tabs
 chrome.tabs.onActivated.addListener(() => {
     resetState();
-    resetDebuggerState();
 });
 
-// Detach debugger if the user navigates away or the tab is closed
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (tabId === debuggingTabId && changeInfo.status === 'loading') {
-        resetDebuggerState();
+// Handle debugger lifecycle events
+chrome.debugger.onEvent.addListener(onDebuggerEvent);
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
+    if (tabId === debuggingTabId && changeInfo.status === 'complete') {
+        try {
+            // Re-enable the runtime to ensure we keep capturing logs after navigation
+            await chrome.debugger.sendCommand({ tabId: tabId }, 'Runtime.enable');
+            console.log("Jules debugger re-enabled runtime on tab:", tabId);
+        } catch (err) {
+            console.error("Error re-enabling runtime on navigation:", err);
+            // If the command fails, it might mean the debugger was detached.
+            // Reset state to be safe.
+            await resetDebuggerState();
+        }
     }
 });
 
-chrome.debugger.onDetach.addListener((source, reason) => {
-    // This listener ensures our state is clean even if detached for other reasons
-    // (e.g., user opens DevTools, another extension attaches).
+chrome.debugger.onDetach.addListener(async (source, reason) => {
+    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (source.tabId === debuggingTabId) {
-        resetDebuggerState();
+        console.log(`Jules debugger detached from tab ${source.tabId} due to: ${reason}`);
+        await resetDebuggerState();
+    }
+});
+
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
+    if (tabId === debuggingTabId) {
+        console.log(`Jules debugger: debugged tab ${tabId} was closed. Cleaning up.`);
+        await resetDebuggerState();
     }
 });
