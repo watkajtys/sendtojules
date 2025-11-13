@@ -91,20 +91,21 @@ async function fetchSources(apiKey) {
 async function createJulesSession(task, data, sourceName, apiKey) {
     const sessionsApiUrl = `${API_BASE_URL}/sessions`;
     const cleanTask = task.trim();
-
-    // Construct a more detailed context string
-    let contextString = `Tag: ${data.tag}`;
-    if (data.id) contextString += `, ID: ${data.id}`;
-    if (data.classes) contextString += `, Classes: ${data.classes}`;
-
-    const combinedPrompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
     const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
+    let prompt = cleanTask;
+
+    if (data && data.outerHTML) {
+        // Construct a more detailed context string when data is available
+        let contextString = `Tag: ${data.tag}`;
+        if (data.id) contextString += `, ID: ${data.id}`;
+        if (data.classes) contextString += `, Classes: ${data.classes}`;
+        prompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
+    }
 
     const payload = {
-        prompt: combinedPrompt,
+        prompt: prompt,
         sourceContext: {
-            source: sourceName,
-            "githubRepoContext": { "startingBranch": "main" }
+            source: sourceName
         },
         title: simpleTitle
     };
@@ -219,12 +220,9 @@ async function handleSubmitTask(message) {
 
     const dataToUse = capturedData || (await chrome.storage.session.get('julesCapturedData')).julesCapturedData;
 
-    if (dataToUse) {
-        capturedData = dataToUse; // Ensure global state is consistent
-        onDataReady(dataToUse);
-    } else {
-        chrome.runtime.sendMessage({ action: "julesError", error: "No element captured." });
-    }
+    // The logic now allows dataToUse to be null for tasks without element selection.
+    // The createJulesSession function is now responsible for handling the null case.
+    onDataReady(dataToUse);
 }
 
 // --- Event Listeners ---
