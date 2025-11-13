@@ -408,6 +408,19 @@
         This will capture network requests (XHR, Fetch) and their responses to help diagnose issues with APIs and data loading.
     </div>
 
+    <div id="cssCaptureContainer" style="display: none;">
+        <div class="toggle-container">
+            <label class="toggle-label" for="captureCSSToggle">Capture Computed CSS</label>
+            <label class="switch">
+                <input type="checkbox" id="captureCSSToggle">
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <label for="cssPreview">Captured CSS (Preview)</label>
+        <pre id="cssPreview" class="code-preview"><code class="language-css">No CSS captured.</code></pre>
+    </div>
+
     <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
     <button id="reselect">Reselect</button>
     <button id="cancelTask">Cancel</button>
