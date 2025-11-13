@@ -288,10 +288,12 @@
 
         .switch {
             position: relative;
-            display: inline-block;
+            display: flex;
+            align-items: center;
             width: 34px;
             height: 20px;
             flex-shrink: 0; /* Prevents the switch from shrinking */
+            margin: 0;
         }
 
         .switch input {
@@ -344,9 +346,9 @@
         }
 
         .toggle-container label.toggle-label {
-             margin: 0;
              font-size: 0.9em;
              color: var(--text-primary);
+             margin-bottom: 2px;
         }
 
         .explanation-text {
@@ -385,11 +387,11 @@
     <pre id="codePreview"><code class="language-xml">No element selected.</code></pre>
 
     <div class="toggle-container">
-        <label class="toggle-label" for="captureLogsToggle">Capture console logs</label>
         <label class="switch">
             <input type="checkbox" id="captureLogsToggle">
             <span class="slider round"></span>
         </label>
+        <label class="toggle-label" for="captureLogsToggle">Capture console logs</label>
     </div>
 
     <div id="logExplanation" class="explanation-text" style="display: none;">
@@ -397,11 +399,11 @@
     </div>
 
     <div class="toggle-container">
-        <label class="toggle-label" for="captureNetworkToggle">Capture network activity</label>
         <label class="switch">
             <input type="checkbox" id="captureNetworkToggle">
             <span class="slider round"></span>
         </label>
+        <label class="toggle-label" for="captureNetworkToggle">Capture network activity</label>
     </div>
 
     <div id="networkExplanation" class="explanation-text" style="display: none;">
@@ -410,11 +412,11 @@
 
     <div id="cssCaptureContainer" style="display: none;">
         <div class="toggle-container">
-            <label class="toggle-label" for="captureCSSToggle">Capture Computed CSS</label>
             <label class="switch">
                 <input type="checkbox" id="captureCSSToggle">
                 <span class="slider round"></span>
             </label>
+            <label class="toggle-label" for="captureCSSToggle">Capture Computed CSS</label>
         </div>
 
         <label for="cssPreview">Captured CSS (Preview)</label>

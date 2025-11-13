@@ -127,6 +127,15 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
         prompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
     }
 
+    if (isCapturingCSS && data && data.dimensions) {
+        let dimensionsString = `\n\n--- Element Dimensions ---\n`;
+        dimensionsString += `Width: ${data.dimensions.width}px, Height: ${data.dimensions.height}px\n`;
+        dimensionsString += `Margin: ${data.dimensions.margin.top} ${data.dimensions.margin.right} ${data.dimensions.margin.bottom} ${data.dimensions.margin.left}\n`;
+        dimensionsString += `Padding: ${data.dimensions.padding.top} ${data.dimensions.padding.right} ${data.dimensions.padding.bottom} ${data.dimensions.padding.left}\n`;
+        dimensionsString += `Border: ${data.dimensions.border.top} ${data.dimensions.border.right} ${data.dimensions.border.bottom} ${data.dimensions.border.left}\n`;
+        prompt += dimensionsString;
+    }
+
     if (isCapturingCSS && data && data.computedCss) {
         let formattedCss = '';
         for (const [state, properties] of Object.entries(data.computedCss)) {
