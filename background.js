@@ -122,7 +122,12 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
         let contextString = `Tag: ${data.tag}`;
         if (data.id) contextString += `, ID: ${data.id}`;
         if (data.classes) contextString += `, Classes: ${data.classes}`;
-        prompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
+
+        if (data.selector) {
+            prompt = `${cleanTask}\n\nHere is the CSS selector for the element I selected:\n\`\`\`css\n${data.selector}\n\`\`\`\n\nAnd here is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
+        } else {
+            prompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
+        }
     }
 
     if (isCapturingCSS && data && data.dimensions) {
@@ -230,6 +235,7 @@ async function handleGetPopupData(sendResponse) {
         sendResponse({
             state: state,
             capturedHtml: capturedData ? capturedData.outerHTML : null,
+            capturedSelector: capturedData ? capturedData.selector : null,
             capturedCss: capturedData ? capturedData.computedCss : null,
             recentRepos: localResult.mostRecentRepos,
             isLogging: localResult.isCapturingLogs,
