@@ -129,12 +129,37 @@
         cleanElement.querySelectorAll('._jules_highlight').forEach(el => el.classList.remove('_jules_highlight'));
 
         const classAttr = cleanElement.getAttribute('class') || '';
+        const rect = target.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(target);
+
         const capturedData = {
             outerHTML: cleanElement.outerHTML,
             tag: target.tagName.toLowerCase(),
             id: target.id,
             classes: classAttr.split(' ').filter(c => !c.startsWith('_jules_') && c).join(' '),
             computedCss: getComputedCss(target), // Capture the computed CSS
+            dimensions: {
+                width: rect.width,
+                height: rect.height,
+                margin: {
+                    top: computedStyle.marginTop,
+                    right: computedStyle.marginRight,
+                    bottom: computedStyle.marginBottom,
+                    left: computedStyle.marginLeft,
+                },
+                padding: {
+                    top: computedStyle.paddingTop,
+                    right: computedStyle.paddingRight,
+                    bottom: computedStyle.paddingBottom,
+                    left: computedStyle.paddingLeft,
+                },
+                border: {
+                    top: computedStyle.borderTopWidth,
+                    right: computedStyle.borderRightWidth,
+                    bottom: computedStyle.borderBottomWidth,
+                    left: computedStyle.borderLeftWidth,
+                }
+            }
         };
         cleanup();
         chrome.runtime.sendMessage({ action: 'elementCaptured', data: capturedData });

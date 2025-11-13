@@ -288,6 +288,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.toggles.captureCSS.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
+            // Also hide the preview and its label
+            const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
+            if (cssPreviewLabel) {
+                cssPreviewLabel.style.display = isEnabled ? 'block' : 'none';
+            }
+            ui.previews.css.style.display = isEnabled ? 'block' : 'none';
             chrome.runtime.sendMessage({ action: "toggleCSSCapture", enabled: isEnabled });
         });
     }
@@ -382,6 +388,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const isCapturingCSS = response.isCapturingCSS ?? false; // Default to false
                 ui.toggles.captureCSS.checked = isCapturingCSS;
+
+                // Hide preview and label initially
+                const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
+                if (cssPreviewLabel) {
+                    cssPreviewLabel.style.display = 'none';
+                }
+                ui.previews.css.style.display = 'none';
+
+                if (isCapturingCSS) {
+                    if (cssPreviewLabel) {
+                        cssPreviewLabel.style.display = 'block';
+                    }
+                    ui.previews.css.style.display = 'block';
+                }
 
                 // Format and display the captured CSS
                 if (response.capturedCss) {
