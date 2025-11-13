@@ -113,7 +113,7 @@ async function fetchSources(apiKey) {
     }
 }
 
-async function createJulesSession(task, data, sourceName, apiKey, logs) {
+async function createJulesSession(task, data, sourceName, apiKey, logs, isCapturingCSS) {
     const sessionsApiUrl = `${API_BASE_URL}/sessions`;
     const cleanTask = task.trim();
     const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
@@ -125,6 +125,24 @@ async function createJulesSession(task, data, sourceName, apiKey, logs) {
         if (data.id) contextString += `, ID: ${data.id}`;
         if (data.classes) contextString += `, Classes: ${data.classes}`;
         prompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
+    }
+
+    if (isCapturingCSS && data && data.computedCss) {
+        let formattedCss = '';
+        for (const [state, properties] of Object.entries(data.computedCss)) {
+            formattedCss += `/* ${state} */\n`;
+            const propEntries = Object.entries(properties);
+            if (propEntries.length > 0) {
+                formattedCss += `element {\n`;
+                for (const [prop, value] of propEntries) {
+                    formattedCss += `  ${prop}: ${value};\n`;
+                }
+                formattedCss += `}\n`;
+            }
+        }
+        if (formattedCss) {
+            prompt += `\n\n--- Captured Computed CSS ---\n\`\`\`css\n${formattedCss.trim()}\n\`\`\``;
+        }
     }
 
     if (logs && logs.length > 0) {
@@ -182,15 +200,14 @@ async function createJulesSession(task, data, sourceName, apiKey, logs) {
 async function handleGetPopupData(sendResponse) {
     // This function is now async to handle storage calls cleanly.
     try {
-        const sessionResult = await chrome.storage.session.get(['julesCapturedData']);
+        const sessionResult = await chrome.storage.session.get(['julesCapturedData', 'julesCapturedTabId']);
         capturedData = sessionResult.julesCapturedData || null;
+        const capturedTabId = sessionResult.julesCapturedTabId || null;
 
-        const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        // If we are debugging and the active tab is the debugged tab, the state is captured.
-        // Otherwise, it's ready to select. This prevents showing stale data on non-debugged tabs.
-        const state = (debuggingTabId && activeTab.id === debuggingTabId && capturedData)
+        // The state should be 'elementCaptured' if data exists and we are on the same tab where the capture happened.
+        const state = (capturedData && capturedTabId && activeTab.id === capturedTabId)
             ? 'elementCaptured'
             : 'readyToSelect';
 
@@ -199,15 +216,18 @@ async function handleGetPopupData(sendResponse) {
         const localResult = await chrome.storage.local.get({
             mostRecentRepos: [],
             isCapturingLogs: false,
-            isCapturingNetwork: false
+            isCapturingNetwork: false,
+            isCapturingCSS: true,
         });
 
         sendResponse({
             state: state,
             capturedHtml: capturedData ? capturedData.outerHTML : null,
+            capturedCss: capturedData ? capturedData.computedCss : null,
             recentRepos: localResult.mostRecentRepos,
             isLogging: localResult.isCapturingLogs,
             isCapturingNetwork: localResult.isCapturingNetwork,
+            isCapturingCSS: localResult.isCapturingCSS,
             view: viewState
         });
     } catch (error) {
@@ -276,8 +296,9 @@ async function handleSubmitTask(message) {
             chrome.runtime.sendMessage({ action: "julesError", error: "API Key not set. Please set it in Options." });
             return;
         }
-        // Pass the captured logs to the session creation function
-        await createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs);
+
+        const { isCapturingCSS } = await chrome.storage.local.get({ isCapturingCSS: true });
+        await createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs, isCapturingCSS);
 
         // Important: Reset the debugger state after logs are sent.
         await resetDebuggerState();
@@ -404,6 +425,11 @@ async function handleToggleNetworkCapture(message) {
     if (tab) await manageDebuggerState(tab.id);
 }
 
+async function handleToggleCSSCapture(message) {
+    await chrome.storage.local.set({ isCapturingCSS: message.enabled });
+}
+
+
 // --- Event Listeners ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -438,20 +464,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'toggleNetworkCapture':
             handleToggleNetworkCapture(message);
             return true;
+        case 'toggleCSSCapture':
+            handleToggleCSSCapture(message);
+            break;
     }
 });
 
 // Reset element selection state when the user switches tabs
 chrome.tabs.onActivated.addListener(async () => {
-    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
+    const { julesCapturedTabId } = await chrome.storage.session.get('julesCapturedTabId');
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    // Only reset the non-persistent state. If the activated tab is not the one being debugged,
-    // we don't want to show the '✅' badge, but we also don't want to clear the session data.
-    if (!debuggingTabId || activeTab.id !== debuggingTabId) {
-        resetState(false); // Pass false to prevent clearing session data
+    // If the activated tab is not the one where we captured an element, reset the non-persistent UI state.
+    if (!julesCapturedTabId || activeTab.id !== julesCapturedTabId) {
+        resetState(false); // Pass false to prevent clearing session data like the HTML itself.
     } else {
-        // If we are switching back to the debugged tab, restore the badge.
+        // If we are switching back to the captured tab, restore the badge.
         const { julesCapturedData } = await chrome.storage.session.get('julesCapturedData');
         if (julesCapturedData) {
             chrome.action.setBadgeText({ text: '✅' });

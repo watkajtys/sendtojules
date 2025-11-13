@@ -25,6 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
         toggles: {
             captureLogs: document.getElementById('captureLogsToggle'),
             captureNetwork: document.getElementById('captureNetworkToggle'),
+            captureCSS: document.getElementById('captureCSSToggle'),
+        },
+        containers: {
+            cssCapture: document.getElementById('cssCaptureContainer'),
+        },
+        previews: {
+            code: document.getElementById('codePreview'),
+            css: document.getElementById('cssPreview'),
         },
         explanations: {
             log: document.getElementById('logExplanation'),
@@ -163,9 +171,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         ui.buttons.createTaskWithoutSelection.addEventListener('click', () => {
-            // This button is now for switching to the task view without an element,
-            // but we don't need to reset the world anymore. The background decides the state.
-            ui.codePreview.querySelector('code').textContent = 'No element selected.';
+            ui.containers.cssCapture.style.display = 'none';
+            ui.previews.code.querySelector('code').textContent = 'No element selected.';
             switchView('task');
         });
 
@@ -278,6 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.explanations.network.style.display = isEnabled ? 'block' : 'none';
             chrome.runtime.sendMessage({ action: "toggleNetworkCapture", enabled: isEnabled });
         });
+
+        ui.toggles.captureCSS.addEventListener('change', (e) => {
+            const isEnabled = e.target.checked;
+            chrome.runtime.sendMessage({ action: "toggleCSSCapture", enabled: isEnabled });
+        });
     }
 
     // --- Message Listeners from Background ---
@@ -364,10 +376,30 @@ document.addEventListener('DOMContentLoaded', () => {
             // Determine the view
             const viewToDisplay = response.view || 'select';
 
-            if (response.state === 'elementCaptured') {
-                ui.codePreview.querySelector('code').textContent = response.capturedHtml || 'No HTML captured.';
+            if (response.state === 'elementCaptured' && response.capturedHtml) {
+                ui.previews.code.querySelector('code').textContent = response.capturedHtml;
+                ui.containers.cssCapture.style.display = 'block';
+
+                const isCapturingCSS = response.isCapturingCSS ?? true; // Default to true
+                ui.toggles.captureCSS.checked = isCapturingCSS;
+
+                // Format and display the captured CSS
+                if (response.capturedCss) {
+                    let formattedCss = '';
+                    for (const [state, properties] of Object.entries(response.capturedCss)) {
+                        formattedCss += `/* ${state} */\n`;
+                        for (const [prop, value] of Object.entries(properties)) {
+                            formattedCss += `  ${prop}: ${value};\n`;
+                        }
+                    }
+                    ui.previews.css.querySelector('code').textContent = formattedCss.trim() || 'No CSS captured.';
+                } else {
+                    ui.previews.css.querySelector('code').textContent = 'No CSS captured.';
+                }
+
             } else {
-                ui.codePreview.querySelector('code').textContent = 'No element selected.';
+                ui.previews.code.querySelector('code').textContent = 'No element selected.';
+                ui.containers.cssCapture.style.display = 'none';
             }
             switchView(viewToDisplay);
 
