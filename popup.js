@@ -19,12 +19,19 @@ document.addEventListener('DOMContentLoaded', () => {
             startOver: document.getElementById('startOver'),
             clearRepo: document.getElementById('clearRepoSelection'),
             dismissTask: document.getElementById('dismissTask'),
+            selectedRepo: document.getElementById('selectedRepoButton'),
+            selectedBranch: document.getElementById('selectedBranchButton'),
         },
         inputs: {
             repoSearch: document.getElementById('repoSearch'),
             selectedRepo: document.getElementById('selectedRepo'),
             taskPrompt: document.getElementById('taskPrompt'),
+            branchSearch: document.getElementById('branchSearch'),
         },
+        repoInputWrapper: document.getElementById('repo-input-wrapper'),
+        sourceSelectionContainer: document.getElementById('sourceSelectionContainer'),
+        branchResults: document.getElementById('branchResults'),
+        branchList: document.getElementById('branchList'),
         toggles: {
             captureLogs: document.getElementById('captureLogsToggle'),
             captureNetwork: document.getElementById('captureNetworkToggle'),
@@ -60,6 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let allSources = [];
     let recentRepos = [];
     let highlightedRepoIndex = -1;
+    let selectedRepoBranches = [];
+    let selectedBranch = '';
+    let highlightedBranchIndex = -1;
 
     // --- View Management ---
     function switchView(viewName) {
@@ -147,11 +157,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function selectRepoItem(item) {
-        ui.inputs.repoSearch.value = item.textContent;
-        ui.inputs.selectedRepo.value = item.dataset.id;
+        const repoId = item.dataset.id;
+        const repoData = allSources.find(s => s.id === repoId);
+
+        ui.inputs.selectedRepo.value = repoId;
+        ui.buttons.selectedRepo.textContent = repoData.name;
+
+        if (repoData && repoData.githubRepo) {
+            selectedRepoBranches = repoData.githubRepo.branches || [];
+            const defaultBranch = repoData.githubRepo.defaultBranch?.displayName;
+
+            if (defaultBranch) {
+                selectedBranch = defaultBranch;
+                ui.buttons.selectedBranch.textContent = defaultBranch;
+                populateBranchResults(selectedRepoBranches);
+            }
+        }
+
+        ui.repoInputWrapper.style.display = 'none';
+        ui.sourceSelectionContainer.style.display = 'flex';
         ui.repoResults.style.display = 'none';
         updateClearButtonVisibility();
-        ui.inputs.taskPrompt.focus(); // Move focus to the task prompt
+        ui.inputs.taskPrompt.focus();
     }
 
     function highlightRepoItem(index) {
@@ -162,6 +189,51 @@ document.addEventListener('DOMContentLoaded', () => {
             itemToHighlight.classList.add('highlighted');
             itemToHighlight.scrollIntoView({ block: 'nearest' });
             highlightedRepoIndex = index;
+        }
+    }
+
+    // --- Branch Selection Logic ---
+
+    function populateBranchResults(branches) {
+        ui.branchList.innerHTML = '';
+        highlightedBranchIndex = -1;
+        let currentIndex = 0;
+
+        branches.forEach(branch => {
+            const item = document.createElement('div');
+            item.className = '_jules_branch-item';
+            item.textContent = branch.displayName;
+            item.dataset.index = currentIndex++;
+            if (branch.displayName === selectedBranch) {
+                item.classList.add('selected');
+                const check = document.createElement('img');
+                check.src = 'icons/check.svg';
+                check.className = 'check-icon';
+                item.appendChild(check);
+            }
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectBranchItem(item);
+            });
+            ui.branchList.appendChild(item);
+        });
+    }
+
+    function selectBranchItem(item) {
+        selectedBranch = item.textContent;
+        ui.buttons.selectedBranch.textContent = selectedBranch;
+        ui.branchResults.style.display = 'none';
+        ui.inputs.taskPrompt.focus();
+    }
+
+    function highlightBranchItem(index) {
+        const items = ui.branchList.querySelectorAll('._jules_branch-item');
+        items.forEach(item => item.classList.remove('highlighted'));
+        if (items.length > 0 && index >= 0 && index < items.length) {
+            const itemToHighlight = items[index];
+            itemToHighlight.classList.add('highlighted');
+            itemToHighlight.scrollIntoView({ block: 'nearest' });
+            highlightedBranchIndex = index;
         }
     }
 
@@ -202,6 +274,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.buttons.submit.addEventListener('click', () => {
             const task = ui.inputs.taskPrompt.value;
             const repositoryId = ui.inputs.selectedRepo.value;
+            const branch = selectedBranch;
+
             if (!task.trim()) {
                 setStatus('Please enter a task.', true);
                 return;
@@ -213,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setStatus('');
             ui.buttons.submit.disabled = true;
             toggleSpinner('submit', true);
-            chrome.runtime.sendMessage({ action: "submitTask", task, repositoryId });
+            chrome.runtime.sendMessage({ action: "submitTask", task, repositoryId, branch });
         });
 
         ui.buttons.startOver.addEventListener('click', () => {
@@ -237,9 +311,62 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.buttons.clearRepo.addEventListener('click', () => {
             ui.inputs.repoSearch.value = '';
             ui.inputs.selectedRepo.value = '';
+            selectedBranch = '';
+            selectedRepoBranches = [];
+            ui.sourceSelectionContainer.style.display = 'none';
+            ui.repoInputWrapper.style.display = 'block';
             updateClearButtonVisibility();
             populateRepoResults(allSources);
             ui.inputs.repoSearch.focus();
+        });
+
+        ui.buttons.selectedRepo.addEventListener('click', () => {
+            ui.sourceSelectionContainer.style.display = 'none';
+            ui.repoInputWrapper.style.display = 'block';
+            ui.inputs.repoSearch.focus();
+            ui.inputs.repoSearch.select();
+        });
+
+        ui.buttons.selectedBranch.addEventListener('click', () => {
+            ui.branchResults.style.display = ui.branchResults.style.display === 'block' ? 'none' : 'block';
+            if (ui.branchResults.style.display === 'block') {
+                ui.inputs.branchSearch.value = '';
+                populateBranchResults(selectedRepoBranches);
+                ui.inputs.branchSearch.focus();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!ui.buttons.selectedBranch.contains(e.target) && !ui.branchResults.contains(e.target)) {
+                ui.branchResults.style.display = 'none';
+            }
+        });
+
+        ui.inputs.branchSearch.addEventListener('input', () => {
+            const query = ui.inputs.branchSearch.value.toLowerCase();
+            const filtered = selectedRepoBranches.filter(b => b.displayName.toLowerCase().includes(query));
+            populateBranchResults(filtered);
+        });
+
+        ui.inputs.branchSearch.addEventListener('keydown', (e) => {
+            const items = ui.branchList.querySelectorAll('._jules_branch-item');
+            if (items.length === 0) return;
+            let newIndex = highlightedBranchIndex;
+
+            if (e.key === 'ArrowDown') {
+                newIndex = (highlightedBranchIndex + 1) % items.length;
+            } else if (e.key === 'ArrowUp') {
+                newIndex = (highlightedBranchIndex - 1 + items.length) % items.length;
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (highlightedBranchIndex !== -1) {
+                    selectBranchItem(items[highlightedBranchIndex]);
+                } else if (items.length > 0) {
+                    selectBranchItem(items[0]);
+                }
+                return;
+            }
+            highlightBranchItem(newIndex);
         });
 
         // Repo search input events

@@ -244,6 +244,119 @@
             align-items: center;
         }
 
+        /* --- GitHub-Style Selector --- */
+        #sourceSelectionContainer {
+            display: none; /* Hidden by default */
+            align-items: center;
+            gap: 4px;
+            margin-top: 5px;
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            height: 38px;
+            padding: 0 4px;
+            overflow: hidden; /* Prevent content from spilling */
+        }
+
+        #selectedRepoButton, #selectedBranchButton {
+            background-color: transparent;
+            border: none;
+            color: var(--text-primary);
+            padding: 6px 8px;
+            cursor: pointer;
+            font-family: "Google Sans Code", monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-radius: 4px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+        }
+
+        #selectedRepoButton {
+            flex-grow: 1; /* Takes up available space */
+            min-width: 0; /* Allows shrinking */
+            justify-content: flex-start;
+        }
+
+        #selectedBranchButton {
+            flex-shrink: 0; /* Prevents shrinking */
+            position: relative; /* For the dropdown */
+        }
+
+        #selectedRepoButton:hover, #selectedBranchButton:hover {
+            background-color: var(--bg-secondary);
+        }
+
+        #branchResults {
+            position: absolute;
+            top: 105%;
+            left: 0;
+            right: 0;
+            background-color: var(--bg-dropdown);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            max-height: 150px;
+            overflow-y: auto;
+            z-index: 20;
+            margin-top: 2px;
+        }
+
+        #branchSearchContainer {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid var(--border-primary);
+            position: sticky;
+            top: 0;
+            background-color: var(--bg-dropdown);
+        }
+
+        #branchSearchIcon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            filter: invert(75%);
+        }
+
+        #branchSearch {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-family: "Google Sans Code", monospace;
+            width: 100%;
+            padding: 0;
+        }
+
+        #branchSearch:focus {
+            outline: none;
+        }
+
+        #branchList div {
+            padding: 8px 10px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #branchList div:hover, #branchList div.highlighted {
+            background-color: var(--bg-dropdown-hover);
+            color: var(--text-primary);
+        }
+
+        #branchList div .check-icon {
+            display: none;
+            width: 16px;
+            height: 16px;
+            filter: invert(100%);
+        }
+
+        #branchList div.selected .check-icon {
+            display: block;
+        }
+
         .clear-repo-selection {
             position: absolute;
             right: 8px;
@@ -462,11 +575,26 @@
 
 <div id="taskView" style="display: none;">
     <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
-    <div class="repo-search-container">
-        <input type="text" id="repoSearch" placeholder="Loading repositories...">
-        <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
+    <div id="repo-input-wrapper">
+        <div class="repo-search-container">
+            <input type="text" id="repoSearch" placeholder="Loading repositories...">
+            <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
+        </div>
+        <div id="repoResults"></div>
     </div>
-    <div id="repoResults"></div>
+    <div id="sourceSelectionContainer">
+        <button id="selectedRepoButton"></button>
+        <div id="branch-selector-wrapper">
+             <button id="selectedBranchButton"></button>
+             <div id="branchResults" style="display: none;">
+                <div id="branchSearchContainer">
+                    <img src="icons/search.svg" id="branchSearchIcon">
+                    <input type="text" id="branchSearch" placeholder="Find a branch">
+                </div>
+                <div id="branchList"></div>
+            </div>
+        </div>
+    </div>
     <input type="hidden" id="selectedRepo" value="">
 
     <label for="taskPrompt">Description</label>
