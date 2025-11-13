@@ -36,18 +36,24 @@ function resetState(forceFullReset = false) {
 }
 
 async function detachDebugger() {
-    // This function's sole purpose is to detach the debugger.
-    // The onDetach event listener will handle cleaning up state.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
-    if (debuggingTabId) {
-        await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
-            // It's fine if it's already detached.
-            if (!err.message.includes("No debugger with given target id") &&
-                !err.message.includes("Target is not attached")) {
-                console.error("Error detaching debugger:", err);
-            }
-        });
-    }
+    if (!debuggingTabId) return;
+
+    // Proactively clear state to prevent race conditions.
+    // The onDetach listener will now act as a safeguard.
+    await chrome.storage.local.remove('debuggingTabId');
+    capturedLogs = [];
+    capturedNetworkActivity = [];
+    console.log(`Proactively cleared state for tab ${debuggingTabId}`);
+
+    // Now, perform the detach operation.
+    await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
+        // It's fine if it's already detached, as we've cleared the state.
+        if (!err.message.includes("No debugger with given target id") &&
+            !err.message.includes("Target is not attached")) {
+            console.error("Error during debugger detach call:", err);
+        }
+    });
 }
 
 
@@ -370,55 +376,59 @@ function onDebuggerEvent(debuggeeId, method, params) {
     });
 }
 
-async function manageDebuggerState(tabId) {
+async function manageDebuggerState() {
     const { isCapturingLogs, isCapturingNetwork, debuggingTabId } = await chrome.storage.local.get([
         'isCapturingLogs',
         'isCapturingNetwork',
         'debuggingTabId'
     ]);
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+    if (!activeTab || !activeTab.id || activeTab.url?.startsWith('chrome://')) {
+        console.warn("Jules: Debugger cannot be attached to the current tab.");
+        // If we were debugging, it's better to detach to avoid a confusing state.
+        if (debuggingTabId) await detachDebugger();
+        return;
+    }
+
+    const targetTabId = activeTab.id;
     const shouldBeDebugging = isCapturingLogs || isCapturingNetwork;
     const isCurrentlyDebugging = !!debuggingTabId;
-    let targetTabId = tabId;
 
     try {
+        // Case 1: We need to start debugging.
         if (shouldBeDebugging && !isCurrentlyDebugging) {
-            try {
-                await chrome.debugger.attach({ tabId: targetTabId }, DEBUGGER_VERSION);
-            } catch (err) {
-                console.warn(`Failed to attach debugger to tab ${targetTabId}, trying active tab. Error: ${err.message}`);
-                const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                if (!activeTab) throw new Error("No active tab found to attach debugger.");
-                targetTabId = activeTab.id;
-                await chrome.debugger.attach({ tabId: targetTabId }, DEBUGGER_VERSION);
-            }
-
+            await chrome.debugger.attach({ tabId: targetTabId }, DEBUGGER_VERSION);
             await chrome.storage.local.set({ debuggingTabId: targetTabId });
-
-            if (isCapturingLogs) await chrome.debugger.sendCommand({ tabId: targetTabId }, 'Runtime.enable');
-            if (isCapturingNetwork) await chrome.debugger.sendCommand({ tabId: targetTabId }, 'Network.enable');
-            console.log("Jules debugger attached and domains configured on tab:", targetTabId);
-
-        } else if (!shouldBeDebugging && isCurrentlyDebugging) {
+            console.log("Jules debugger attached to tab:", targetTabId);
+        }
+        // Case 2: We need to stop debugging.
+        else if (!shouldBeDebugging && isCurrentlyDebugging) {
             await detachDebugger();
+            return; // Exit after detaching.
+        }
+        // Case 3: We are debugging, but the active tab has changed. "Move" the session.
+        else if (shouldBeDebugging && isCurrentlyDebugging && debuggingTabId !== targetTabId) {
+            await detachDebugger(); // Detach from the old tab.
+            await chrome.debugger.attach({ tabId: targetTabId }, DEBUGGER_VERSION); // Attach to the new tab.
+            await chrome.storage.local.set({ debuggingTabId: targetTabId });
+            console.log(`Jules debugger moved from tab ${debuggingTabId} to ${targetTabId}`);
+        }
 
-        } else if (shouldBeDebugging && isCurrentlyDebugging) {
-            if (targetTabId !== debuggingTabId) {
-                console.warn("Attempted to manage debugger on a different tab. This shouldn't happen.");
-                return;
-            }
-            if (isCapturingLogs) {
-                await chrome.debugger.sendCommand({ tabId: targetTabId }, 'Runtime.enable');
+        // After any attach/move operations, ensure the correct domains are enabled.
+        const newDebuggingTabId = (await chrome.storage.local.get('debuggingTabId')).debuggingTabId;
+        if (shouldBeDebugging && newDebuggingTabId) {
+             if (isCapturingLogs) {
+                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Runtime.enable');
             } else {
-                await chrome.debugger.sendCommand({ tabId: targetTabId }, 'Runtime.disable').catch(() => {});
+                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Runtime.disable').catch(() => {});
             }
-
             if (isCapturingNetwork) {
-                await chrome.debugger.sendCommand({ tabId: targetTabId }, 'Network.enable');
+                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Network.enable');
             } else {
-                await chrome.debugger.sendCommand({ tabId: targetTabId }, 'Network.disable').catch(() => {});
+                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Network.disable').catch(() => {});
             }
-            console.log("Jules debugger domains updated.");
+            console.log("Jules debugger domains configured for tab:", newDebuggingTabId);
         }
     } catch (err) {
         console.error("Error managing debugger state:", err.message);
@@ -438,23 +448,13 @@ async function manageDebuggerState(tabId) {
 async function handleToggleLogCapture(message) {
     const { enabled } = message;
     await chrome.storage.local.set({ isCapturingLogs: enabled });
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url && !tab.url.startsWith('chrome://')) {
-        await manageDebuggerState(tab.id);
-    } else {
-        console.warn("Jules: Debugger cannot be attached to the current tab.");
-    }
+    await manageDebuggerState();
 }
 
 async function handleToggleNetworkCapture(message) {
     const { enabled } = message;
     await chrome.storage.local.set({ isCapturingNetwork: enabled });
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url && !tab.url.startsWith('chrome://')) {
-        await manageDebuggerState(tab.id);
-    } else {
-        console.warn("Jules: Debugger cannot be attached to the current tab.");
-    }
+    await manageDebuggerState();
 }
 
 async function handleToggleCSSCapture(message) {
@@ -554,12 +554,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 });
 
 chrome.debugger.onDetach.addListener(async (source, reason) => {
+    // This listener now acts as a safeguard for unexpected detaches (e.g., user closes tab).
+    // Proactive cleanup is handled in the `detachDebugger` function.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
-    if (source.tabId === debuggingTabId) {
-        console.log(`Jules debugger detached from tab ${source.tabId}. Reason: ${reason}. Cleaning up session state.`);
-        // This is the central cleanup location. It runs whenever the debugger is detached for any reason.
-        // We only clear the debuggingTabId, preserving the toggle states (isCapturingLogs, isCapturingNetwork)
-        // so the UI remains consistent with the user's intent.
+
+    // If a debuggingTabId still exists and it matches the detached tab, it means
+    // the detach was not initiated by our `detachDebugger` function, so we need to clean up.
+    if (debuggingTabId && source.tabId === debuggingTabId) {
+        console.log(`Jules debugger detached unexpectedly from tab ${source.tabId}. Reason: ${reason}. Cleaning up.`);
         await chrome.storage.local.remove('debuggingTabId');
         capturedLogs = [];
         capturedNetworkActivity = [];
