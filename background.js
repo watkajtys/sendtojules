@@ -1,286 +1,20 @@
-// Global state
-let capturedData = null;
-let capturedLogs = [];
-let capturedNetworkActivity = [];
+// --- Imports ---
 
-// Debugging state is now managed in chrome.storage.local
-// { debuggingTabId: number | null }
-
-// Constants
-const DEBUGGER_VERSION = "1.3";
-const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
-const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-// --- State Management ---
-
-function resetState(forceFullReset = false) {
-    capturedData = null;
-    chrome.action.setBadgeText({ text: '' });
-
-    if (forceFullReset) {
-        // Proactively clean up content scripts in the last known tab
-        chrome.storage.session.get(['julesCapturedTabId'], (result) => {
-            const tabId = result.julesCapturedTabId;
-            if (tabId) {
-                chrome.tabs.sendMessage(tabId, { action: "cleanupSelector" }).catch(err => {
-                    // Ignore errors if the tab was closed, but log others.
-                    if (!err.message.includes("Receiving end does not exist.")) {
-                        console.error("Error sending cleanup message:", err);
-                    }
-                });
-            }
-        });
-        // Clear all session data
-        chrome.storage.session.remove(['julesCapturedData', 'julesCapturedTabId', 'viewState', 'taskPromptText']);
-    }
-}
-
-async function detachDebugger() {
-    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
-    if (!debuggingTabId) return;
-
-    // Proactively clear state to prevent race conditions.
-    // The onDetach listener will now act as a safeguard.
-    await chrome.storage.local.remove('debuggingTabId');
-    capturedLogs = [];
-    capturedNetworkActivity = [];
-    console.log(`Proactively cleared state for tab ${debuggingTabId}`);
-
-    // Now, perform the detach operation.
-    await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
-        // It's fine if it's already detached, as we've cleared the state.
-        if (!err.message.includes("No debugger with given target id") &&
-            !err.message.includes("Target is not attached")) {
-            console.error("Error during debugger detach call:", err);
-        }
-    });
-}
-
-
-// --- API Interaction ---
-
-async function fetchSources(apiKey) {
-    // Implements a stale-while-revalidate caching strategy.
-
-    // 1. Immediately send cached data if it exists.
-    chrome.storage.local.get('julesSourcesCache', (result) => {
-        if (result.julesSourcesCache && result.julesSourcesCache.sources) {
-            chrome.runtime.sendMessage({
-                action: "sourcesLoaded",
-                sources: result.julesSourcesCache.sources
-            });
-        }
-    });
-
-    // 2. Always fetch fresh data in the background.
-    const sourcesApiUrl = `${API_BASE_URL}/sources`;
-    let allSources = [];
-    let nextPageToken = null;
-
-    try {
-        do {
-            const url = nextPageToken ? `${sourcesApiUrl}?pageToken=${nextPageToken}` : sourcesApiUrl;
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: { 'X-Goog-Api-Key': apiKey, 'Content-Type': 'application/json' }
-            });
-
-            if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
-
-            const data = await response.json();
-            if (data.sources) allSources.push(...data.sources);
-            nextPageToken = data.nextPageToken;
-        } while (nextPageToken);
-
-        const newSources = allSources.map(source => ({
-            id: source.name,
-            name: source.id,
-            githubRepo: source.githubRepo // Keep the full repo info
-        }));
-
-        // 3. Get the current cache to compare against.
-        const result = await chrome.storage.local.get('julesSourcesCache');
-        const oldSources = result.julesSourcesCache ? result.julesSourcesCache.sources : null;
-
-        // 4. If data is new, update cache and notify the popup.
-        if (JSON.stringify(oldSources) !== JSON.stringify(newSources)) {
-            await chrome.storage.local.set({
-                julesSourcesCache: { sources: newSources, timestamp: Date.now() }
-            });
-
-            const action = oldSources ? "sourcesRefreshed" : "sourcesLoaded";
-            chrome.runtime.sendMessage({ action: action, sources: newSources });
-        }
-    } catch (error) {
-        console.error('Failed to fetch sources:', error);
-        // Only propagate error if there's no cached data at all.
-        const result = await chrome.storage.local.get('julesSourcesCache');
-        if (!result.julesSourcesCache) {
-            chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch sources." });
-        }
-    }
-}
-
-async function createJulesSession(task, data, sourceName, branch, apiKey, logs, isCapturingCSS) {
-    const sessionsApiUrl = `${API_BASE_URL}/sessions`;
-    const cleanTask = task.trim();
-    const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
-    let prompt = cleanTask;
-
-    if (data && data.outerHTML) {
-        prompt += `\n\nThe user has selected the following HTML element:\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
-
-        if (data.selector) {
-            prompt += `\n\nThe element is located at the following DOM Path:\n\`\`\`css\n${data.selector}\n\`\`\``;
-        }
-    }
-
-    if (isCapturingCSS && data && data.dimensions) {
-        let dimensionsString = `\n\n--- Element Dimensions ---\n`;
-        dimensionsString += `Width: ${data.dimensions.width}px, Height: ${data.dimensions.height}px\n`;
-        dimensionsString += `Margin: ${data.dimensions.margin.top} ${data.dimensions.margin.right} ${data.dimensions.margin.bottom} ${data.dimensions.margin.left}\n`;
-        dimensionsString += `Padding: ${data.dimensions.padding.top} ${data.dimensions.padding.right} ${data.dimensions.padding.bottom} ${data.dimensions.padding.left}\n`;
-        dimensionsString += `Border: ${data.dimensions.border.top} ${data.dimensions.border.right} ${data.dimensions.border.bottom} ${data.dimensions.border.left}\n`;
-        prompt += dimensionsString;
-    }
-
-    if (isCapturingCSS && data && data.computedCss) {
-        let formattedCss = '';
-        for (const [state, properties] of Object.entries(data.computedCss)) {
-            formattedCss += `/* ${state} */\n`;
-            const propEntries = Object.entries(properties);
-            if (propEntries.length > 0) {
-                formattedCss += `element {\n`;
-                for (const [prop, value] of propEntries) {
-                    formattedCss += `  ${prop}: ${value};\n`;
-                }
-                formattedCss += `}\n`;
-            }
-        }
-        if (formattedCss) {
-            prompt += `\n\nThe element has the following computed CSS styles:\n\`\`\`css\n${formattedCss.trim()}\n\`\`\``;
-        }
-    }
-
-    if (logs && logs.length > 0) {
-        const formattedLogs = logs.map(log => `[${log.timestamp}] [${log.level}] ${log.message}`).join('\n');
-        prompt += `\n\n--- Captured Console Logs ---\n${formattedLogs}\n--- End Logs ---`;
-    }
-
-    if (capturedNetworkActivity && capturedNetworkActivity.length > 0) {
-        const formattedNetwork = capturedNetworkActivity.map(req => {
-            return `[${new Date(req.timestamp * 1000).toISOString()}] ${req.method} ${req.url} - Status: ${req.status}\nResponse Body (truncated):\n${req.responseBody || 'N/A'}`;
-        }).join('\n\n');
-        prompt += `\n\n--- Captured Network Activity ---\n${formattedNetwork}\n--- End Network Activity ---`;
-    }
-
-    const payload = {
-        prompt: prompt,
-        sourceContext: {
-            source: sourceName,
-            githubRepoContext: {
-                startingBranch: branch || ""
-            }
-        },
-        title: simpleTitle
-    };
-
-    try {
-        const response = await fetch(sessionsApiUrl, {
-            method: 'POST',
-            headers: {
-                'X-Goog-Api-Key': apiKey,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: { message: 'Unknown API error' } }));
-            throw new Error(errorData.error?.message || `API Error: ${response.status}`);
-        }
-
-        const sessionData = await response.json();
-        chrome.runtime.sendMessage({ action: "julesResponse", data: sessionData });
-
-        // Invalidate the history cache after a successful submission
-        await chrome.storage.local.remove('julesHistoryCache');
-
-    } catch (error) {
-        console.error('Failed to create Jules session:', error);
-        chrome.runtime.sendMessage({ action: "julesError", error: error.message });
-    } finally {
-        resetState(true); // Perform a full reset
-    }
-}
-
-async function fetchHistory(apiKey) {
-    // Implements a stale-while-revalidate caching strategy for history.
-    const HISTORY_CACHE_KEY = 'julesHistoryCache';
-
-    // 1. Immediately send cached data if it exists.
-    chrome.storage.local.get(HISTORY_CACHE_KEY, (result) => {
-        if (result[HISTORY_CACHE_KEY] && result[HISTORY_CACHE_KEY].sessions) {
-            chrome.runtime.sendMessage({
-                action: "historyLoaded",
-                history: result[HISTORY_CACHE_KEY].sessions,
-                isFromCache: true // Add a flag to indicate this is cached data
-            });
-        }
-    });
-
-    // 2. Always fetch fresh data in the background.
-    const sessionsApiUrl = `${API_BASE_URL}/sessions?pageSize=5`;
-    try {
-        const response = await fetch(sessionsApiUrl, {
-            method: 'GET',
-            headers: { 'X-Goog-Api-Key': apiKey, 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-            throw new Error(`API Error ${response.status}: ${await response.text()}`);
-        }
-
-        const data = await response.json();
-        const newHistory = data.sessions || [];
-
-        // 3. Compare with cache and update if necessary.
-        const result = await chrome.storage.local.get(HISTORY_CACHE_KEY);
-        const oldHistory = result[HISTORY_CACHE_KEY] ? result[HISTORY_CACHE_KEY].sessions : null;
-
-        if (JSON.stringify(oldHistory) !== JSON.stringify(newHistory)) {
-            await chrome.storage.local.set({ [HISTORY_CACHE_KEY]: { sessions: newHistory } });
-        }
-
-        // Always send the fresh data to the UI. This ensures the spinner is hidden
-        // even if the data hasn't changed.
-        chrome.runtime.sendMessage({ action: "historyLoaded", history: newHistory, isFromCache: false });
-
-    } catch (error) {
-        console.error('Failed to fetch session history:', error);
-        // We don't send an error if we've already sent cached data.
-        // The UI can decide how to handle this (e.g., show a small refresh error).
-        const result = await chrome.storage.local.get(HISTORY_CACHE_KEY);
-        if (!result[HISTORY_CACHE_KEY]) {
-            chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
-        }
-    }
-}
-
+import { capturedData, capturedLogs, resetState, setCapturedData } from './state.js';
+import { fetchSources, createJulesSession, fetchHistory } from './api.js';
+import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger.js';
 
 // --- Message Handlers ---
 
 async function handleGetPopupData(sendResponse) {
-    // This function is now async to handle storage calls cleanly.
     try {
         const sessionResult = await chrome.storage.session.get(['julesCapturedData', 'julesCapturedTabId']);
-        capturedData = sessionResult.julesCapturedData || null;
         const capturedTabId = sessionResult.julesCapturedTabId || null;
+        let localCapturedData = sessionResult.julesCapturedData || null;
 
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        // The state should be 'elementCaptured' if data exists and we are on the same tab where the capture happened.
-        const state = (capturedData && capturedTabId && activeTab.id === capturedTabId)
+        const state = (localCapturedData && capturedTabId && activeTab.id === capturedTabId)
             ? 'elementCaptured'
             : 'readyToSelect';
 
@@ -295,9 +29,9 @@ async function handleGetPopupData(sendResponse) {
 
         sendResponse({
             state: state,
-            capturedHtml: capturedData ? capturedData.outerHTML : null,
-            capturedSelector: capturedData ? capturedData.selector : null,
-            capturedCss: capturedData ? capturedData.computedCss : null,
+            capturedHtml: localCapturedData ? localCapturedData.outerHTML : null,
+            capturedSelector: localCapturedData ? localCapturedData.selector : null,
+            capturedCss: localCapturedData ? localCapturedData.computedCss : null,
             recentRepos: localResult.mostRecentRepos,
             isLogging: localResult.isCapturingLogs,
             isCapturingNetwork: localResult.isCapturingNetwork,
@@ -306,22 +40,20 @@ async function handleGetPopupData(sendResponse) {
         });
     } catch (error) {
         console.error("Error getting popup data:", error);
-        // It's good practice to still send a response in case of error.
         sendResponse({ error: "Failed to retrieve initial data." });
     }
 
-    // Trigger the stale-while-revalidate source fetch
     chrome.storage.sync.get(['julesApiKey'], (result) => {
         if (!result.julesApiKey) {
             chrome.runtime.sendMessage({ action: 'julesError', error: "API Key not set" });
             return;
         }
-        fetchSources(result.julesApiKey); // This function now handles sending messages
+        fetchSources(result.julesApiKey);
     });
 }
 
 async function handleStartSelection() {
-    resetState(true); // Full reset
+    resetState(true);
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -329,7 +61,6 @@ async function handleStartSelection() {
 
         chrome.storage.session.set({ 'julesCapturedTabId': tab.id });
 
-        // Inject scripts and start selection
         await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["selector.css"] });
         await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["selector.js"] });
         await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
@@ -340,7 +71,7 @@ async function handleStartSelection() {
 }
 
 function handleElementCaptured(message) {
-    capturedData = message.data;
+    setCapturedData(message.data);
     chrome.storage.session.set({ 'julesCapturedData': message.data, 'viewState': 'task' });
     chrome.action.setBadgeText({ text: '✅' });
     chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
@@ -349,7 +80,6 @@ function handleElementCaptured(message) {
 async function handleSubmitTask(message) {
     const { task, repositoryId, branch } = message;
 
-    // --- Save to Most Recent ---
     const sourcesResult = await chrome.storage.local.get('julesSourcesCache');
     const allSources = sourcesResult.julesSourcesCache?.sources || [];
     const selectedSource = allSources.find(s => s.id === repositoryId);
@@ -362,7 +92,6 @@ async function handleSubmitTask(message) {
         if (recentRepos.length > 3) recentRepos.pop();
         await chrome.storage.local.set({ mostRecentRepos: recentRepos });
     }
-    // --- End Save to Most Recent ---
 
     const onDataReady = async (data) => {
         const result = await chrome.storage.sync.get(['julesApiKey']);
@@ -373,172 +102,29 @@ async function handleSubmitTask(message) {
 
         const { isCapturingCSS } = await chrome.storage.local.get({ isCapturingCSS: false });
         await createJulesSession(task, data, repositoryId, branch, result.julesApiKey, capturedLogs, isCapturingCSS);
-
-        // Important: Detach the debugger after logs have been sent.
-        // The onDetach listener will handle the state cleanup.
         await detachDebugger();
     };
 
-    const dataToUse = capturedData || (await chrome.storage.session.get('julesCapturedData')).julesCapturedData;
-
-    // The logic now allows dataToUse to be null for tasks without element selection.
-    // The createJulesSession function is now responsible for handling the null case.
+    const sessionData = await chrome.storage.session.get('julesCapturedData');
+    const dataToUse = capturedData || sessionData.julesCapturedData;
     await onDataReady(dataToUse);
 }
-
-// --- Debugger Logic ---
-
-function onDebuggerEvent(debuggeeId, method, params) {
-    chrome.storage.local.get('debuggingTabId', ({ debuggingTabId }) => {
-        if (!debuggingTabId || debuggeeId.tabId !== debuggingTabId) {
-            return;
-        }
-
-        if (method === 'Network.requestWillBeSent') {
-            capturedNetworkActivity.push({
-                requestId: params.requestId,
-                url: params.request.url,
-                method: params.request.method,
-                headers: params.request.headers,
-                timestamp: params.timestamp,
-            });
-        } else if (method === 'Network.responseReceived') {
-            const request = capturedNetworkActivity.find(req => req.requestId === params.requestId);
-            if (request) {
-                request.status = params.response.status;
-                request.responseHeaders = params.response.headers;
-
-                chrome.debugger.sendCommand(
-                    { tabId: debuggingTabId },
-                    "Network.getResponseBody",
-                    { requestId: params.requestId },
-                    (response) => {
-                        if (chrome.runtime.lastError) {
-                            console.warn(`Could not get response body for ${params.requestId}: ${chrome.runtime.lastError.message}`);
-                            return; // Don't proceed if there was an error
-                        }
-                        if (response && response.body) {
-                            request.responseBody = response.body.substring(0, 500); // Truncate
-                        }
-                    }
-                );
-            }
-        } else if (method === 'Runtime.consoleAPICalled') {
-            const logEntry = {
-                timestamp: new Date(params.timestamp).toISOString(),
-                level: params.type,
-                message: params.args.map(arg => {
-                    if (arg.type === 'string') return arg.value;
-                    return arg.description || JSON.stringify(arg.value) || 'Unserializable object';
-                }).join(' ')
-            };
-            capturedLogs.push(logEntry);
-        }
-    });
-}
-
-async function manageDebuggerState() {
-    const { isCapturingLogs, isCapturingNetwork, debuggingTabId } = await chrome.storage.local.get([
-        'isCapturingLogs',
-        'isCapturingNetwork',
-        'debuggingTabId'
-    ]);
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    if (!activeTab || !activeTab.id || activeTab.url?.startsWith('chrome://')) {
-        console.warn("Jules: Debugger cannot be attached to the current tab.");
-        // If we were debugging, it's better to detach to avoid a confusing state.
-        if (debuggingTabId) await detachDebugger();
-        return;
-    }
-
-    const targetTabId = activeTab.id;
-    const shouldBeDebugging = isCapturingLogs || isCapturingNetwork;
-    const isCurrentlyDebugging = !!debuggingTabId;
-
-    try {
-        // Case 1: We need to start debugging.
-        if (shouldBeDebugging && !isCurrentlyDebugging) {
-            await chrome.debugger.attach({ tabId: targetTabId }, DEBUGGER_VERSION);
-            await chrome.storage.local.set({ debuggingTabId: targetTabId });
-            console.log("Jules debugger attached to tab:", targetTabId);
-        }
-        // Case 2: We need to stop debugging.
-        else if (!shouldBeDebugging && isCurrentlyDebugging) {
-            await detachDebugger();
-            return; // Exit after detaching.
-        }
-        // Case 3: We are debugging, but the active tab has changed. "Move" the session.
-        else if (shouldBeDebugging && isCurrentlyDebugging && debuggingTabId !== targetTabId) {
-            await detachDebugger(); // Detach from the old tab.
-            await chrome.debugger.attach({ tabId: targetTabId }, DEBUGGER_VERSION); // Attach to the new tab.
-            await chrome.storage.local.set({ debuggingTabId: targetTabId });
-            console.log(`Jules debugger moved from tab ${debuggingTabId} to ${targetTabId}`);
-        }
-
-        // After any attach/move operations, ensure the correct domains are enabled.
-        const newDebuggingTabId = (await chrome.storage.local.get('debuggingTabId')).debuggingTabId;
-        if (shouldBeDebugging && newDebuggingTabId) {
-             if (isCapturingLogs) {
-                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Runtime.enable');
-            } else {
-                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Runtime.disable').catch(() => {});
-            }
-            if (isCapturingNetwork) {
-                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Network.enable');
-            } else {
-                await chrome.debugger.sendCommand({ tabId: newDebuggingTabId }, 'Network.disable').catch(() => {});
-            }
-            console.log("Jules debugger domains configured for tab:", newDebuggingTabId);
-        }
-    } catch (err) {
-        console.error("Error managing debugger state:", err.message);
-        const isNotAttachedError = err.message.includes("No debugger with given target id") || err.message.includes("Target is not attached");
-
-        if (isNotAttachedError && (await chrome.storage.local.get('debuggingTabId')).debuggingTabId) {
-            console.log("Correcting stale debugging state by removing tabId.");
-            await chrome.storage.local.remove('debuggingTabId');
-        } else if (!isNotAttachedError) {
-            chrome.runtime.sendMessage({ action: "julesError", error: `Debugger error: ${err.message}` });
-            await detachDebugger(); // Clean up on other failures
-        }
-    }
-}
-
-
-async function handleToggleLogCapture(message) {
-    const { enabled } = message;
-    await chrome.storage.local.set({ isCapturingLogs: enabled });
-    await manageDebuggerState();
-}
-
-async function handleToggleNetworkCapture(message) {
-    const { enabled } = message;
-    await chrome.storage.local.set({ isCapturingNetwork: enabled });
-    await manageDebuggerState();
-}
-
-async function handleToggleCSSCapture(message) {
-    await chrome.storage.local.set({ isCapturingCSS: message.enabled });
-}
-
 
 // --- Event Listeners ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
         case 'popupOpened':
-            // When the popup opens, send back any persisted text.
             chrome.storage.session.get('taskPromptText', (result) => {
                 sendResponse({ taskPromptText: result.taskPromptText });
             });
-            return true; // Keep channel open for async response
+            return true;
         case 'saveTaskPrompt':
             chrome.storage.session.set({ taskPromptText: message.text });
             break;
         case 'getPopupData':
             handleGetPopupData(sendResponse);
-            return true; // Keep message channel open for async response
+            return true;
         case 'startSelection':
             handleStartSelection();
             return true;
@@ -546,19 +132,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             handleElementCaptured(message);
             break;
         case 'cancelSelection':
-            resetState(true); // Full reset
+            resetState(true);
             break;
         case 'submitTask':
             handleSubmitTask(message);
             return true;
         case 'toggleLogCapture':
-            handleToggleLogCapture(message);
+            chrome.storage.local.set({ isCapturingLogs: message.enabled }).then(manageDebuggerState);
             return true;
         case 'toggleNetworkCapture':
-            handleToggleNetworkCapture(message);
+            chrome.storage.local.set({ isCapturingNetwork: message.enabled }).then(manageDebuggerState);
             return true;
         case 'toggleCSSCapture':
-            handleToggleCSSCapture(message);
+            chrome.storage.local.set({ isCapturingCSS: message.enabled });
             break;
         case 'fetchHistory':
             chrome.storage.sync.get(['julesApiKey'], (result) => {
@@ -572,16 +158,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Reset element selection state when the user switches tabs
 chrome.tabs.onActivated.addListener(async () => {
     const { julesCapturedTabId } = await chrome.storage.session.get('julesCapturedTabId');
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    // If the activated tab is not the one where we captured an element, reset the non-persistent UI state.
     if (!julesCapturedTabId || activeTab.id !== julesCapturedTabId) {
-        resetState(false); // Pass false to prevent clearing session data like the HTML itself.
+        resetState(false);
     } else {
-        // If we are switching back to the captured tab, restore the badge.
         const { julesCapturedData } = await chrome.storage.session.get('julesCapturedData');
         if (julesCapturedData) {
             chrome.action.setBadgeText({ text: '✅' });
@@ -590,7 +173,6 @@ chrome.tabs.onActivated.addListener(async () => {
     }
 });
 
-// Handle debugger lifecycle events
 chrome.debugger.onEvent.addListener(onDebuggerEvent);
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
@@ -602,21 +184,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 
     if (tabId === debuggingTabId && changeInfo.status === 'complete') {
         try {
-            if (isCapturingLogs) {
-                await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
-                console.log("Jules debugger re-enabled Runtime on tab:", tabId);
-            }
-            if (isCapturingNetwork) {
-                await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
-                console.log("Jules debugger re-enabled Network on tab:", tabId);
-            }
+            if (isCapturingLogs) await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+            if (isCapturingNetwork) await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
         } catch (err) {
             console.error("Error re-enabling debugger domains on navigation:", err.message);
-            // If the error is that the debugger is no longer attached, our onDetach
-            // listener will handle the state cleanup automatically.
-            const isNotAttachedError = err.message.includes("No debugger with given target id") || err.message.includes("Target is not attached");
-            if (!isNotAttachedError) {
-                // For other unexpected errors, we can force a cleanup.
+            if (!err.message.includes("No debugger with given target id") && !err.message.includes("Target is not attached")) {
                 await detachDebugger();
             }
         }
@@ -624,23 +196,16 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 });
 
 chrome.debugger.onDetach.addListener(async (source, reason) => {
-    // This listener now acts as a safeguard for unexpected detaches (e.g., user closes tab).
-    // Proactive cleanup is handled in the `detachDebugger` function.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
-
-    // If a debuggingTabId still exists and it matches the detached tab, it means
-    // the detach was not initiated by our `detachDebugger` function, so we need to clean up.
     if (debuggingTabId && source.tabId === debuggingTabId) {
         console.log(`Jules debugger detached unexpectedly from tab ${source.tabId}. Reason: ${reason}. Cleaning up.`);
         await chrome.storage.local.remove('debuggingTabId');
-        capturedLogs = [];
-        capturedNetworkActivity = [];
+        capturedLogs.length =  0;
+        capturedNetworkActivity.length = 0;
     }
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
-    // onDetach will be triggered automatically when the tab is closed,
-    // so no extra cleanup logic is needed here.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (tabId === debuggingTabId) {
         console.log(`Jules debugger: debugged tab ${tabId} was closed.`);
