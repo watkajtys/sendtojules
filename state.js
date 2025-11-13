@@ -19,6 +19,7 @@ const defaults = {
     isCapturingCSS: false,
     debuggingTabId: null,
     julesSourcesCache: null,
+    julesHistoryCache: null,
 
     // In-memory state (not persisted)
     capturedLogs: [],
@@ -109,6 +110,9 @@ export async function setDebuggingTabId(tabId) { await setLocalState('debuggingT
 
 export function getSourcesCache() { return state.julesSourcesCache; }
 export async function setSourcesCache(cache) { await setLocalState('julesSourcesCache', cache); }
+
+export function getHistoryCache() { return state.julesHistoryCache; }
+export async function setHistoryCache(cache) { await setLocalState('julesHistoryCache', cache); }
 
 export function getCapturedLogs() { return state.capturedLogs; }
 export function clearCapturedLogs() { state.capturedLogs = []; }
