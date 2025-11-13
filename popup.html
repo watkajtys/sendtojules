@@ -85,7 +85,7 @@
             color            : var(--text-primary);
         }
 
-        #selectElement, #reselect, #createTaskWithoutSelection, #cancelTask {
+        #selectElement, #reselect, #createTaskWithoutSelection, #cancelTask, #viewHistory {
             background-color : var(--bg-secondary);
             border           : 1px solid var(--border-primary);
         }
@@ -367,6 +367,88 @@
             padding-left: 5px;
             border-left: 2px solid var(--border-primary);
         }
+
+        /* History View Styles */
+        .history-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .history-header h4 {
+            margin: 0;
+            font-weight: 500;
+        }
+
+        #backButton {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+        }
+
+        .history-card {
+            background-color: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 10px;
+            border: 1px solid var(--border-primary);
+        }
+
+        .history-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .history-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-card-title {
+            font-weight: bold;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-card-status {
+            font-size: 0.8em;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: bold;
+        }
+
+        .status-completed {
+            background-color: #2E7D32; /* Green */
+            color: white;
+        }
+
+        .status-in_progress, .status-planning, .status-queued {
+            background-color: #FFC107; /* Amber */
+            color: #111;
+        }
+
+        .status-failed {
+            background-color: #D32F2F; /* Red */
+            color: white;
+        }
+
+        .status-paused, .status-awaiting_plan_approval, .status-awaiting_user_feedback {
+            background-color: #757575; /* Gray */
+            color: white;
+        }
+
+        .history-card-repo {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -375,6 +457,7 @@
 <div id="selectView">
     <button id="selectElement">Select an Element</button>
     <button id="createTaskWithoutSelection">Create task without selection</button>
+    <button id="viewHistory">View Task History</button>
 </div>
 
 <div id="taskView" style="display: none;">
@@ -452,6 +535,17 @@
 <button id="startOver" style="display: none;">Start Over</button>
 
 <div id="status"></div>
+
+<div id="historyView" style="display: none;">
+    <div class="history-header">
+        <button id="backButton">&larr; Back</button>
+        <h4>Task History</h4>
+    </div>
+    <div id="historyList">
+        <!-- History items will be injected here -->
+    </div>
+    <div id="historyLoadingSpinner" class="spinner" style="display: none;"></div>
+</div>
 
 <script src="popup.js"></script>
 </body>

@@ -212,6 +212,26 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
     }
 }
 
+async function fetchHistory(apiKey) {
+    const sessionsApiUrl = `${API_BASE_URL}/sessions?pageSize=5`;
+    try {
+        const response = await fetch(sessionsApiUrl, {
+            method: 'GET',
+            headers: { 'X-Goog-Api-Key': apiKey, 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Error ${response.status}: ${await response.text()}`);
+        }
+
+        const data = await response.json();
+        chrome.runtime.sendMessage({ action: "historyLoaded", history: data.sessions });
+    } catch (error) {
+        console.error('Failed to fetch session history:', error);
+        chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
+    }
+}
+
 
 // --- Message Handlers ---
 
@@ -505,6 +525,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'toggleCSSCapture':
             handleToggleCSSCapture(message);
             break;
+        case 'fetchHistory':
+            chrome.storage.sync.get(['julesApiKey'], (result) => {
+                if (!result.julesApiKey) {
+                    chrome.runtime.sendMessage({ action: 'julesError', error: "API Key not set" });
+                    return;
+                }
+                fetchHistory(result.julesApiKey);
+            });
+            return true;
     }
 });
 
