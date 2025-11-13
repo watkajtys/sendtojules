@@ -92,7 +92,11 @@ async function fetchSources(apiKey) {
             nextPageToken = data.nextPageToken;
         } while (nextPageToken);
 
-        const newSources = allSources.map(source => ({ id: source.name, name: source.id }));
+        const newSources = allSources.map(source => ({
+            id: source.name,
+            name: source.id,
+            githubRepo: source.githubRepo // Keep the full repo info
+        }));
 
         // 3. Get the current cache to compare against.
         const result = await chrome.storage.local.get('julesSourcesCache');
@@ -117,7 +121,7 @@ async function fetchSources(apiKey) {
     }
 }
 
-async function createJulesSession(task, data, sourceName, apiKey, logs, isCapturingCSS) {
+async function createJulesSession(task, data, sourceName, branch, apiKey, logs, isCapturingCSS) {
     const sessionsApiUrl = `${API_BASE_URL}/sessions`;
     const cleanTask = task.trim();
     const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
@@ -175,7 +179,7 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
         sourceContext: {
             source: sourceName,
             githubRepoContext: {
-                startingBranch: ""
+                startingBranch: branch || ""
             }
         },
         title: simpleTitle
@@ -287,7 +291,7 @@ function handleElementCaptured(message) {
 }
 
 async function handleSubmitTask(message) {
-    const { task, repositoryId } = message;
+    const { task, repositoryId, branch } = message;
 
     // --- Save to Most Recent ---
     const sourcesResult = await chrome.storage.local.get('julesSourcesCache');
@@ -312,7 +316,7 @@ async function handleSubmitTask(message) {
         }
 
         const { isCapturingCSS } = await chrome.storage.local.get({ isCapturingCSS: false });
-        await createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs, isCapturingCSS);
+        await createJulesSession(task, data, repositoryId, branch, result.julesApiKey, capturedLogs, isCapturingCSS);
 
         // Important: Detach the debugger after logs have been sent.
         // The onDetach listener will handle the state cleanup.
