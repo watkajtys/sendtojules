@@ -6,10 +6,13 @@ document.addEventListener('DOMContentLoaded', () => {
             task: document.getElementById('taskView'),
             result: document.getElementById('resultView'),
             dismiss: document.getElementById('dismissView'),
+            history: document.getElementById('historyView'),
         },
         buttons: {
             select: document.getElementById('selectElement'),
             createTaskWithoutSelection: document.getElementById('createTaskWithoutSelection'),
+            viewHistory: document.getElementById('viewHistory'),
+            back: document.getElementById('backButton'),
             submit: document.getElementById('submitTask'),
             reselect: document.getElementById('reselect'),
             cancelTask: document.getElementById('cancelTask'),
@@ -42,7 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
         spinners: {
             repo: document.getElementById('repoLoadingSpinner'),
             submit: document.getElementById('submitSpinner'),
+            history: document.getElementById('historyLoadingSpinner'),
         },
+        historyList: document.getElementById('historyList'),
         repoResults: document.getElementById('repoResults'),
         codePreview: document.getElementById('codePreview'),
         resultTitle: document.getElementById('resultTitle'),
@@ -175,6 +180,16 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.containers.cssCapture.style.display = 'none';
             ui.previews.code.querySelector('code').textContent = 'No element selected.';
             switchView('task');
+        });
+
+        ui.buttons.viewHistory.addEventListener('click', () => {
+            switchView('history');
+            toggleSpinner('history', true);
+            chrome.runtime.sendMessage({ action: "fetchHistory" });
+        });
+
+        ui.buttons.back.addEventListener('click', () => {
+            switchView('select');
         });
 
         ui.buttons.reselect.addEventListener('click', () => {
@@ -341,10 +356,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 case "julesError":
                     toggleSpinner('repo', false);
                     toggleSpinner('submit', false);
+                    toggleSpinner('history', false);
                     setStatus(`Error: ${message.error}`, true);
                     ui.buttons.submit.disabled = false;
                     break;
+
+                case "historyLoaded":
+                    toggleSpinner('history', false);
+                    renderHistory(message.history);
+                    break;
             }
+        });
+    }
+
+    function renderHistory(history) {
+        ui.historyList.innerHTML = ''; // Clear previous items
+
+        if (!history || history.length === 0) {
+            ui.historyList.innerHTML = '<div class="history-item">No recent tasks found.</div>';
+            return;
+        }
+
+        history.forEach(session => {
+            const card = document.createElement('div');
+            card.className = 'history-card';
+
+            const status = session.state || 'UNKNOWN';
+            const repoName = session.sourceContext?.source.split('/').slice(-2).join('/') || 'N/A';
+
+            card.innerHTML = `
+                <a href="https://jules.google.com/session/${session.id}" target="_blank" class="history-link">
+                    <div class="history-card-header">
+                        <span class="history-card-title">${session.title}</span>
+                        <span class="history-card-status status-${status.toLowerCase()}">${status}</span>
+                    </div>
+                    <div class="history-card-repo">${repoName}</div>
+                </a>
+            `;
+            ui.historyList.appendChild(card);
         });
     }
 
