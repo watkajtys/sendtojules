@@ -35,21 +35,19 @@ function resetState(forceFullReset = false) {
     }
 }
 
-async function resetDebuggerState() {
+async function detachDebugger() {
+    // This function's sole purpose is to detach the debugger.
+    // The onDetach event listener will handle cleaning up state.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (debuggingTabId) {
         await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
-            // Ignore errors if the debugger is already detached (e.g., by DevTools)
+            // It's fine if it's already detached.
             if (!err.message.includes("No debugger with given target id") &&
                 !err.message.includes("Target is not attached")) {
                 console.error("Error detaching debugger:", err);
             }
         });
     }
-    await chrome.storage.local.remove(['debuggingTabId', 'isCapturingLogs', 'isCapturingNetwork']);
-    capturedLogs = [];
-    capturedNetworkActivity = [];
-    console.log("Jules debugger state reset.");
 }
 
 
@@ -309,8 +307,9 @@ async function handleSubmitTask(message) {
         const { isCapturingCSS } = await chrome.storage.local.get({ isCapturingCSS: false });
         await createJulesSession(task, data, repositoryId, result.julesApiKey, capturedLogs, isCapturingCSS);
 
-        // Important: Reset the debugger state after logs are sent.
-        await resetDebuggerState();
+        // Important: Detach the debugger after logs have been sent.
+        // The onDetach listener will handle the state cleanup.
+        await detachDebugger();
     };
 
     const dataToUse = capturedData || (await chrome.storage.session.get('julesCapturedData')).julesCapturedData;
@@ -390,7 +389,7 @@ async function manageDebuggerState(tabId) {
         }
         // Case 2: We need to stop debugging entirely.
         else if (!shouldBeDebugging && isCurrentlyDebugging) {
-             await resetDebuggerState(); // resetDebuggerState handles detach and cleanup.
+             await detachDebugger();
         }
         // Case 3: We are already debugging, just need to adjust domains.
         else if (shouldBeDebugging && isCurrentlyDebugging) {
@@ -415,7 +414,7 @@ async function manageDebuggerState(tabId) {
     } catch (err) {
         console.error("Error managing debugger state:", err);
         chrome.runtime.sendMessage({ action: "julesError", error: `Debugger error: ${err.message}` });
-        await resetDebuggerState(); // Clean up on any failure.
+        await detachDebugger(); // Clean up on any failure.
     }
 }
 
@@ -520,8 +519,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
         } catch (err) {
             console.error("Error re-enabling runtime on navigation:", err);
             // If the command fails, it might mean the debugger was detached.
-            // Reset state to be safe.
-            await resetDebuggerState();
+            // The onDetach listener will handle the cleanup.
         }
     }
 });
@@ -529,15 +527,20 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 chrome.debugger.onDetach.addListener(async (source, reason) => {
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (source.tabId === debuggingTabId) {
-        console.log(`Jules debugger detached from tab ${source.tabId} due to: ${reason}`);
-        await resetDebuggerState();
+        console.log(`Jules debugger detached from tab ${source.tabId}. Reason: ${reason}. Cleaning up state.`);
+        // This is the central cleanup location.
+        // It runs when the user closes the banner, or we call detach().
+        await chrome.storage.local.remove(['debuggingTabId', 'isCapturingLogs', 'isCapturingNetwork']);
+        capturedLogs = [];
+        capturedNetworkActivity = [];
     }
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+    // onDetach will be triggered automatically when the tab is closed,
+    // so no extra cleanup logic is needed here.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
     if (tabId === debuggingTabId) {
-        console.log(`Jules debugger: debugged tab ${tabId} was closed. Cleaning up.`);
-        await resetDebuggerState();
+        console.log(`Jules debugger: debugged tab ${tabId} was closed.`);
     }
 });
