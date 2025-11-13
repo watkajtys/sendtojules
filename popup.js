@@ -256,9 +256,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.buttons.viewHistory.addEventListener('click', () => {
             switchView('history');
-            // Don't show the main spinner immediately.
-            // Instead, we'll potentially show a smaller, less intrusive one
-            // if we get cached data first.
+            // Immediately clear the list and show the spinner on click.
+            ui.historyList.innerHTML = '';
+            toggleSpinner('history', true);
             chrome.runtime.sendMessage({ action: "fetchHistory" });
         });
 
@@ -515,21 +515,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderHistory(history, isFromCache) {
-        if (!isFromCache) {
-            ui.historyList.innerHTML = ''; // Clear only when rendering fresh data to avoid flicker
-        }
+        // The spinner is now managed by the caller, so we only handle rendering.
+        // We also only clear the list right before rendering new content.
+        ui.historyList.innerHTML = '';
 
         if (!history || history.length === 0) {
-            ui.historyList.innerHTML = '<div class="history-item">No recent tasks found.</div>';
+            // Only show "No tasks" message if this is the final data (not from cache)
+            if (!isFromCache) {
+                ui.historyList.innerHTML = '<div class="history-item">No recent tasks found.</div>';
+            }
             return;
         }
 
-        // If this is cached data, show a spinner to indicate a refresh is happening.
-        if (isFromCache) {
-            toggleSpinner('history', true);
-        }
-
-        // Use a document fragment for efficiency
         const fragment = document.createDocumentFragment();
         history.forEach(session => {
             const card = document.createElement('div');
@@ -549,8 +546,6 @@ document.addEventListener('DOMContentLoaded', () => {
             fragment.appendChild(card);
         });
 
-        // Replace the content in one go
-        ui.historyList.innerHTML = '';
         ui.historyList.appendChild(fragment);
     }
 
@@ -631,6 +626,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             switchView(viewToDisplay);
             if (viewToDisplay === 'history') {
+                // Immediately clear the list and show the spinner on load.
+                ui.historyList.innerHTML = '';
+                toggleSpinner('history', true);
                 chrome.runtime.sendMessage({ action: "fetchHistory" });
             }
 
