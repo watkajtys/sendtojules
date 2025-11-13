@@ -264,6 +264,20 @@
             display : none;
         }
 
+        #dismissView {
+            display: none;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+
+        #dismissTask {
+            width: auto;
+            padding: 8px 12px;
+            font-size: 0.9em;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+        }
+
         /* Toggle Switch CSS */
         .toggle-container {
             display: flex;
@@ -394,6 +408,10 @@
         <p id="resultSubtitle">Background task in progress</p>
     </div>
     <a id="sessionLink" href="#" target="_blank">View task</a>
+</div>
+
+<div id="dismissView">
+    <button id="dismissTask">Dismiss</button>
 </div>
 
 <button id="startOver" style="display: none;">Start Over</button>

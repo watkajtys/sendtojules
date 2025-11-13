@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
             select: document.getElementById('selectView'),
             task: document.getElementById('taskView'),
             result: document.getElementById('resultView'),
+            dismiss: document.getElementById('dismissView'),
         },
         buttons: {
             select: document.getElementById('selectElement'),
@@ -14,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelTask: document.getElementById('cancelTask'),
             startOver: document.getElementById('startOver'),
             clearRepo: document.getElementById('clearRepoSelection'),
+            dismissTask: document.getElementById('dismissTask'),
         },
         inputs: {
             repoSearch: document.getElementById('repoSearch'),
@@ -50,6 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (viewToShow) {
             // Use 'flex' for the result view as defined in the CSS, 'block' for others.
             viewToShow.style.display = viewName === 'result' ? 'flex' : 'block';
+        }
+
+        if (viewName === 'result') {
+            ui.views.dismiss.style.display = 'flex';
         }
         // Persist the current view state
         chrome.storage.session.set({ 'viewState': viewName });
@@ -190,6 +196,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         ui.buttons.cancelTask.addEventListener('click', () => {
+            chrome.runtime.sendMessage({ action: "cancelSelection" });
+            switchView('select');
+            setStatus('');
+        });
+
+        ui.buttons.dismissTask.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "cancelSelection" });
             switchView('select');
             setStatus('');
