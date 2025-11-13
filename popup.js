@@ -549,6 +549,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             recentRepos = response.recentRepos || [];
 
+            // Immediately render the cached recent repos to give the user an interactive UI.
+            // The full list will be populated when the background fetch completes.
+            populateRepoResults(allSources);
+
             const isLogging = response.isLogging || false;
             ui.toggles.captureLogs.checked = isLogging;
             ui.explanations.log.style.display = isLogging ? 'block' : 'none';
