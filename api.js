@@ -2,8 +2,6 @@
 
 // This module handles all fetch calls to the Jules API.
 
-import { getCapturedNetworkActivity, resetState, getSourcesCache, setSourcesCache, getHistoryCache, setHistoryCache } from './state.js';
-
 const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
 
 /**
@@ -11,10 +9,11 @@ const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
  * Implements a stale-while-revalidate caching strategy.
  *
  * @param {string} apiKey - The user's API key.
+ * @param {object} stateManager - The state management object.
  */
-export async function fetchSources(apiKey) {
+export async function fetchSources(apiKey, stateManager) {
     // 1. Immediately send cached data if it exists.
-    const cachedSources = getSourcesCache();
+    const cachedSources = stateManager.getSourcesCache();
     if (cachedSources && cachedSources.sources) {
         chrome.runtime.sendMessage({
             action: "sourcesLoaded",
@@ -49,16 +48,16 @@ export async function fetchSources(apiKey) {
         }));
 
         // 3. Compare with cache and update if necessary.
-        const oldSources = getSourcesCache() ? getSourcesCache().sources : null;
+        const oldSources = stateManager.getSourcesCache() ? stateManager.getSourcesCache().sources : null;
 
         if (JSON.stringify(oldSources) !== JSON.stringify(newSources)) {
-            await setSourcesCache({ sources: newSources, timestamp: Date.now() });
+            await stateManager.setSourcesCache({ sources: newSources, timestamp: Date.now() });
             const action = oldSources ? "sourcesRefreshed" : "sourcesLoaded";
             chrome.runtime.sendMessage({ action: action, sources: newSources });
         }
     } catch (error) {
         console.error('Failed to fetch sources:', error);
-        if (!getSourcesCache()) {
+        if (!stateManager.getSourcesCache()) {
             chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch sources." });
         }
     }
@@ -74,8 +73,9 @@ export async function fetchSources(apiKey) {
  * @param {string} apiKey - The user's API key.
  * @param {Array} logs - The captured console logs.
  * @param {boolean} isCapturingCSS - Whether to include computed CSS in the prompt.
+ * @param {object} stateManager - The state management object.
  */
-export async function createJulesSession(task, data, sourceName, branch, apiKey, logs, isCapturingCSS) {
+export async function createJulesSession(task, data, sourceName, branch, apiKey, logs, isCapturingCSS, stateManager) {
     const sessionsApiUrl = `${API_BASE_URL}/sessions`;
     const cleanTask = task.trim();
     const simpleTitle = cleanTask.split('\n')[0].substring(0, 80);
@@ -117,7 +117,7 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
         prompt += `\n\n--- Captured Console Logs ---\n${formattedLogs}\n--- End Logs ---`;
     }
 
-    const networkActivity = getCapturedNetworkActivity();
+    const networkActivity = stateManager.getCapturedNetworkActivity();
     if (networkActivity && networkActivity.length > 0) {
         const formattedNetwork = networkActivity.map(req => {
             return `[${new Date(req.timestamp * 1000).toISOString()}] ${req.method} ${req.url} - Status: ${req.status}\nResponse Body (truncated):\n${req.responseBody || 'N/A'}`;
@@ -152,7 +152,7 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
         console.error('Failed to create Jules session:', error);
         chrome.runtime.sendMessage({ action: "julesError", error: error.message });
     } finally {
-        resetState(true); // Perform a full reset after submission
+        stateManager.resetState(true); // Perform a full reset after submission
     }
 }
 
@@ -161,10 +161,11 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
  * Also uses a stale-while-revalidate cache.
  *
  * @param {string} apiKey - The user's API key.
+ * @param {object} stateManager - The state management object.
  */
-export async function fetchHistory(apiKey) {
+export async function fetchHistory(apiKey, stateManager) {
     // 1. Immediately send cached data
-    const cachedHistory = getHistoryCache();
+    const cachedHistory = stateManager.getHistoryCache();
     if (cachedHistory && cachedHistory.sessions) {
         chrome.runtime.sendMessage({
             action: "historyLoaded",
@@ -188,16 +189,16 @@ export async function fetchHistory(apiKey) {
         const data = await response.json();
         const newHistory = data.sessions || [];
 
-        const oldHistory = getHistoryCache() ? getHistoryCache().sessions : null;
+        const oldHistory = stateManager.getHistoryCache() ? stateManager.getHistoryCache().sessions : null;
 
         if (JSON.stringify(oldHistory) !== JSON.stringify(newHistory)) {
-            await setHistoryCache({ sessions: newHistory });
+            await stateManager.setHistoryCache({ sessions: newHistory });
         }
         chrome.runtime.sendMessage({ action: "historyLoaded", history: newHistory, isFromCache: false });
 
     } catch (error) {
         console.error('Failed to fetch session history:', error);
-        if (!getHistoryCache()) {
+        if (!stateManager.getHistoryCache()) {
             chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
         }
     }

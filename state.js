@@ -4,150 +4,161 @@
 // It's the single source of truth. It initializes state from storage when the
 // service worker starts and persists any changes back to storage immediately.
 
-// Define default state
-const defaults = {
-    // Session state (cleared when the browser closes)
-    julesCapturedData: null,
-    julesCapturedTabId: null,
-    viewState: 'select',
-    taskPromptText: '',
-
-    // Local state (persists across browser sessions)
-    mostRecentRepos: [],
-    isCapturingLogs: false,
-    isCapturingNetwork: false,
-    isCapturingCSS: false,
-    debuggingTabId: null,
-    julesSourcesCache: null,
-    julesHistoryCache: null,
-
-    // In-memory state (not persisted)
-    capturedLogs: [],
-    capturedNetworkActivity: [],
-};
-
-// In-memory state cache
-let state = { ...defaults };
-
 /**
- * Initializes the state from chrome.storage.
- * This should be called when the service worker starts up.
- */
-export async function initializeState() {
-    const localState = await chrome.storage.local.get(Object.keys(defaults));
-    const sessionState = await chrome.storage.session.get(Object.keys(defaults));
-    Object.assign(state, localState, sessionState);
-}
-
-/**
- * Gets the entire current state.
+ * Creates and initializes a state management object.
+ * This is the main export of the module.
  *
- * @returns {object} The current state object.
+ * @returns {Promise<object>} A promise that resolves to the state management API.
  */
-export function getState() {
-    return { ...state };
-}
+export const initState = async () => {
+    // Define default state
+    const defaults = {
+        // Session state (cleared when the browser closes)
+        julesCapturedData: null,
+        julesCapturedTabId: null,
+        viewState: 'select',
+        taskPromptText: '',
 
-/**
- * Generic setter for a property in session storage.
- *
- * @param {string} key - The key of the state property to set.
- * @param {*} value - The value to set.
- */
-async function setSessionState(key, value) {
-    state[key] = value;
-    await chrome.storage.session.set({ [key]: value });
-}
+        // Local state (persists across browser sessions)
+        mostRecentRepos: [],
+        isCapturingLogs: false,
+        isCapturingNetwork: false,
+        isCapturingCSS: false,
+        debuggingTabId: null,
+        julesSourcesCache: null,
+        julesHistoryCache: null,
 
-/**
- * Generic setter for a property in local storage.
- *
- * @param {string} key - The key of the state property to set.
- * @param {*} value - The value to set.
- */
-async function setLocalState(key, value) {
-    state[key] = value;
-    await chrome.storage.local.set({ [key]: value });
-}
+        // In-memory state (not persisted)
+        capturedLogs: [],
+        capturedNetworkActivity: [],
+    };
 
+    // In-memory state cache
+    let state = { ...defaults };
 
-// --- Getters and Setters ---
-
-export function getCapturedData() { return state.julesCapturedData; }
-export async function setCapturedData(data) {
-    await setSessionState('julesCapturedData', data);
-    if (data) {
-        await setSessionState('viewState', 'task');
-        chrome.action.setBadgeText({ text: '✅' });
-        chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+    /**
+     * Initializes the state from chrome.storage.
+     * This is called automatically when the module is initialized.
+     */
+    async function initializeState() {
+        if (!chrome.storage) {
+            throw new Error("No SW");
+        }
+        const localState = await chrome.storage.local.get(Object.keys(defaults));
+        const sessionState = await chrome.storage.session.get(Object.keys(defaults));
+        Object.assign(state, localState, sessionState);
     }
-}
-
-export function getCapturedTabId() { return state.julesCapturedTabId; }
-export async function setCapturedTabId(tabId) { await setSessionState('julesCapturedTabId', tabId); }
-
-export function getViewState() { return state.viewState; }
-export async function setViewState(view) { await setSessionState('viewState', view); }
-
-export function getTaskPromptText() { return state.taskPromptText; }
-export async function setTaskPromptText(text) { await setSessionState('taskPromptText', text); }
 
 
-export function getMostRecentRepos() { return state.mostRecentRepos; }
-export async function setMostRecentRepos(repos) { await setLocalState('mostRecentRepos', repos); }
+    /**
+     * Generic setter for a property in session storage.
+     */
+    async function setSessionState(key, value) {
+        state[key] = value;
+        await chrome.storage.session.set({ [key]: value });
+    }
 
-export function getIsCapturingLogs() { return state.isCapturingLogs; }
-export async function setIsCapturingLogs(enabled) { await setLocalState('isCapturingLogs', enabled); }
+    /**
+     * Generic setter for a property in local storage.
+     */
+    async function setLocalState(key, value) {
+        state[key] = value;
+        await chrome.storage.local.set({ [key]: value });
+    }
 
-export function getIsCapturingNetwork() { return state.isCapturingNetwork; }
-export async function setIsCapturingNetwork(enabled) { await setLocalState('isCapturingNetwork', enabled); }
+    // --- Getters and Setters (The Public API) ---
 
-export function getIsCapturingCSS() { return state.isCapturingCSS; }
-export async function setIsCapturingCSS(enabled) { await setLocalState('isCapturingCSS', enabled); }
+    function getState() { return { ...state }; }
 
-export function getDebuggingTabId() { return state.debuggingTabId; }
-export async function setDebuggingTabId(tabId) { await setLocalState('debuggingTabId', tabId); }
+    function getCapturedData() { return state.julesCapturedData; }
+    async function setCapturedData(data) {
+        await setSessionState('julesCapturedData', data);
+        if (data) {
+            await setSessionState('viewState', 'task');
+            chrome.action.setBadgeText({ text: '✅' });
+            chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+        }
+    }
 
-export function getSourcesCache() { return state.julesSourcesCache; }
-export async function setSourcesCache(cache) { await setLocalState('julesSourcesCache', cache); }
+    function getCapturedTabId() { return state.julesCapturedTabId; }
+    async function setCapturedTabId(tabId) { await setSessionState('julesCapturedTabId', tabId); }
 
-export function getHistoryCache() { return state.julesHistoryCache; }
-export async function setHistoryCache(cache) { await setLocalState('julesHistoryCache', cache); }
+    function getViewState() { return state.viewState; }
+    async function setViewState(view) { await setSessionState('viewState', view); }
 
-export function getCapturedLogs() { return state.capturedLogs; }
-export function clearCapturedLogs() { state.capturedLogs = []; }
+    function getTaskPromptText() { return state.taskPromptText; }
+    async function setTaskPromptText(text) { await setSessionState('taskPromptText', text); }
 
-export function getCapturedNetworkActivity() { return state.capturedNetworkActivity; }
-export function clearCapturedNetworkActivity() { state.capturedNetworkActivity = []; }
+    function getMostRecentRepos() { return state.mostRecentRepos; }
+    async function setMostRecentRepos(repos) { await setLocalState('mostRecentRepos', repos); }
 
+    function getIsCapturingLogs() { return state.isCapturingLogs; }
+    async function setIsCapturingLogs(enabled) { await setLocalState('isCapturingLogs', enabled); }
 
-/**
- * Resets the extension's state.
- *
- * @param {boolean} forceFullReset - If true, clears all session data and sends a cleanup message to the content script.
- */
-export async function resetState(forceFullReset = false) {
-    state.capturedData = null; // In-memory only
-    chrome.action.setBadgeText({ text: '' });
+    function getIsCapturingNetwork() { return state.isCapturingNetwork; }
+    async function setIsCapturingNetwork(enabled) { await setLocalState('isCapturingNetwork', enabled); }
 
-    if (forceFullReset) {
-        const tabId = getCapturedTabId();
-        if (tabId) {
-            try {
-                await chrome.tabs.sendMessage(tabId, { action: "cleanupSelector" });
-            } catch (err) {
-                // Ignore errors if the tab was closed, but log others.
-                if (!err.message.includes("Receiving end does not exist.")) {
-                    console.error("Error sending cleanup message:", err);
+    function getIsCapturingCSS() { return state.isCapturingCSS; }
+    async function setIsCapturingCSS(enabled) { await setLocalState('isCapturingCSS', enabled); }
+
+    function getDebuggingTabId() { return state.debuggingTabId; }
+    async function setDebuggingTabId(tabId) { await setLocalState('debuggingTabId', tabId); }
+
+    function getSourcesCache() { return state.julesSourcesCache; }
+    async function setSourcesCache(cache) { await setLocalState('julesSourcesCache', cache); }
+
+    function getHistoryCache() { return state.julesHistoryCache; }
+    async function setHistoryCache(cache) { await setLocalState('julesHistoryCache', cache); }
+
+    function getCapturedLogs() { return state.capturedLogs; }
+    function clearCapturedLogs() { state.capturedLogs = []; }
+
+    function getCapturedNetworkActivity() { return state.capturedNetworkActivity; }
+    function clearCapturedNetworkActivity() { state.capturedNetworkActivity = []; }
+
+    async function resetState(forceFullReset = false) {
+        state.capturedData = null; // In-memory only
+        chrome.action.setBadgeText({ text: '' });
+
+        if (forceFullReset) {
+            const tabId = getCapturedTabId();
+            if (tabId) {
+                try {
+                    await chrome.tabs.sendMessage(tabId, { action: "cleanupSelector" });
+                } catch (err) {
+                    if (!err.message.includes("Receiving end does not exist.")) {
+                        console.error("Error sending cleanup message:", err);
+                    }
                 }
             }
-        }
 
-        // Clear all session data
-        const sessionKeys = ['julesCapturedData', 'julesCapturedTabId', 'viewState', 'taskPromptText'];
-        await chrome.storage.session.remove(sessionKeys);
-        for (const key of sessionKeys) {
-            state[key] = defaults[key];
+            const sessionKeys = ['julesCapturedData', 'julesCapturedTabId', 'viewState', 'taskPromptText'];
+            await chrome.storage.session.remove(sessionKeys);
+            for (const key of sessionKeys) {
+                state[key] = defaults[key];
+            }
         }
     }
-}
+
+    // Initialize the state before returning the API
+    await initializeState();
+
+    // Return the public API
+    return {
+        getState,
+        getCapturedData, setCapturedData,
+        getCapturedTabId, setCapturedTabId,
+        getViewState, setViewState,
+        getTaskPromptText, setTaskPromptText,
+        getMostRecentRepos, setMostRecentRepos,
+        getIsCapturingLogs, setIsCapturingLogs,
+        getIsCapturingNetwork, setIsCapturingNetwork,
+        getIsCapturingCSS, setIsCapturingCSS,
+        getDebuggingTabId, setDebuggingTabId,
+        getSourcesCache, setSourcesCache,
+        getHistoryCache, setHistoryCache,
+        getCapturedLogs, clearCapturedLogs,
+        getCapturedNetworkActivity, clearCapturedNetworkActivity,
+        resetState,
+    };
+};
