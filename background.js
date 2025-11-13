@@ -199,6 +199,9 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
         const sessionData = await response.json();
         chrome.runtime.sendMessage({ action: "julesResponse", data: sessionData });
 
+        // Invalidate the history cache after a successful submission
+        await chrome.storage.local.remove('julesHistoryCache');
+
     } catch (error) {
         console.error('Failed to create Jules session:', error);
         chrome.runtime.sendMessage({ action: "julesError", error: error.message });
@@ -208,6 +211,21 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
 }
 
 async function fetchHistory(apiKey) {
+    // Implements a stale-while-revalidate caching strategy for history.
+    const HISTORY_CACHE_KEY = 'julesHistoryCache';
+
+    // 1. Immediately send cached data if it exists.
+    chrome.storage.local.get(HISTORY_CACHE_KEY, (result) => {
+        if (result[HISTORY_CACHE_KEY] && result[HISTORY_CACHE_KEY].sessions) {
+            chrome.runtime.sendMessage({
+                action: "historyLoaded",
+                history: result[HISTORY_CACHE_KEY].sessions,
+                isFromCache: true // Add a flag to indicate this is cached data
+            });
+        }
+    });
+
+    // 2. Always fetch fresh data in the background.
     const sessionsApiUrl = `${API_BASE_URL}/sessions?pageSize=5`;
     try {
         const response = await fetch(sessionsApiUrl, {
@@ -220,10 +238,28 @@ async function fetchHistory(apiKey) {
         }
 
         const data = await response.json();
-        chrome.runtime.sendMessage({ action: "historyLoaded", history: data.sessions });
+        const newHistory = data.sessions || [];
+
+        // 3. Compare with cache and update if necessary.
+        const result = await chrome.storage.local.get(HISTORY_CACHE_KEY);
+        const oldHistory = result[HISTORY_CACHE_KEY] ? result[HISTORY_CACHE_KEY].sessions : null;
+
+        if (JSON.stringify(oldHistory) !== JSON.stringify(newHistory)) {
+            await chrome.storage.local.set({ [HISTORY_CACHE_KEY]: { sessions: newHistory } });
+        }
+
+        // Always send the fresh data to the UI. This ensures the spinner is hidden
+        // even if the data hasn't changed.
+        chrome.runtime.sendMessage({ action: "historyLoaded", history: newHistory, isFromCache: false });
+
     } catch (error) {
         console.error('Failed to fetch session history:', error);
-        chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
+        // We don't send an error if we've already sent cached data.
+        // The UI can decide how to handle this (e.g., show a small refresh error).
+        const result = await chrome.storage.local.get(HISTORY_CACHE_KEY);
+        if (!result[HISTORY_CACHE_KEY]) {
+            chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
+        }
     }
 }
 

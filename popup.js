@@ -184,7 +184,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.buttons.viewHistory.addEventListener('click', () => {
             switchView('history');
-            toggleSpinner('history', true);
+            // Don't show the main spinner immediately.
+            // Instead, we'll potentially show a smaller, less intrusive one
+            // if we get cached data first.
             chrome.runtime.sendMessage({ action: "fetchHistory" });
         });
 
@@ -354,33 +356,57 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
 
                 case "julesError":
-                    toggleSpinner('repo', false);
-                    toggleSpinner('submit', false);
-                    toggleSpinner('history', false);
-                    setStatus(`Error: ${message.error}`, true);
-                    ui.buttons.submit.disabled = false;
+                    // Check if the history list is already populated from cache
+                    const isHistoryVisible = ui.views.history.style.display !== 'none';
+                    const hasCachedHistory = ui.historyList.children.length > 0 && ui.historyList.children[0].className === 'history-card';
+
+                    if (isHistoryVisible && hasCachedHistory) {
+                        // If we are in the history view and have cached data,
+                        // show a less intrusive error.
+                        setStatus("Failed to refresh history.", true);
+                        toggleSpinner('history', false); // Hide the spinner
+                    } else {
+                        // Otherwise, show the full error.
+                        toggleSpinner('repo', false);
+                        toggleSpinner('submit', false);
+                        toggleSpinner('history', false);
+                        setStatus(`Error: ${message.error}`, true);
+                        ui.buttons.submit.disabled = false;
+                    }
                     break;
 
                 case "historyLoaded":
-                    toggleSpinner('history', false);
-                    renderHistory(message.history);
+                    // If this is fresh data, hide the spinner.
+                    // If it's cached data, we don't hide it, because a fetch is in progress.
+                    if (!message.isFromCache) {
+                        toggleSpinner('history', false);
+                    }
+                    renderHistory(message.history, message.isFromCache);
                     break;
             }
         });
     }
 
-    function renderHistory(history) {
-        ui.historyList.innerHTML = ''; // Clear previous items
+    function renderHistory(history, isFromCache) {
+        if (!isFromCache) {
+            ui.historyList.innerHTML = ''; // Clear only when rendering fresh data to avoid flicker
+        }
 
         if (!history || history.length === 0) {
             ui.historyList.innerHTML = '<div class="history-item">No recent tasks found.</div>';
             return;
         }
 
+        // If this is cached data, show a spinner to indicate a refresh is happening.
+        if (isFromCache) {
+            toggleSpinner('history', true);
+        }
+
+        // Use a document fragment for efficiency
+        const fragment = document.createDocumentFragment();
         history.forEach(session => {
             const card = document.createElement('div');
             card.className = 'history-card';
-
             const status = session.state || 'UNKNOWN';
             const repoName = session.sourceContext?.source.split('/').slice(-2).join('/') || 'N/A';
 
@@ -393,8 +419,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="history-card-repo">${repoName}</div>
                 </a>
             `;
-            ui.historyList.appendChild(card);
+            fragment.appendChild(card);
         });
+
+        // Replace the content in one go
+        ui.historyList.innerHTML = '';
+        ui.historyList.appendChild(fragment);
     }
 
     // --- Initialization ---
@@ -473,6 +503,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 ui.containers.cssCapture.style.display = 'none';
             }
             switchView(viewToDisplay);
+            if (viewToDisplay === 'history') {
+                chrome.runtime.sendMessage({ action: "fetchHistory" });
+            }
 
             // Initial population of results if sources are already cached
             if (allSources.length > 0) {
