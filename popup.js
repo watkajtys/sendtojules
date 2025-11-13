@@ -76,15 +76,13 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(ui.views).forEach(view => view.style.display = 'none');
         const viewToShow = ui.views[viewName];
         if (viewToShow) {
-            // Use 'flex' for the result view as defined in the CSS, 'block' for others.
             viewToShow.style.display = viewName === 'result' ? 'flex' : 'block';
         }
 
         if (viewName === 'result') {
             ui.views.dismiss.style.display = 'flex';
         }
-        // Persist the current view state
-        chrome.storage.session.set({ 'viewState': viewName });
+        chrome.runtime.sendMessage({ action: 'setViewState', view: viewName });
     }
 
     // --- UI Helpers ---
@@ -130,12 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return header;
         };
 
-        // Filter out recent repos from the main list to avoid duplication
         const recentIds = new Set(recentRepos.map(r => r.id));
         const nonRecentSources = filteredSources.filter(s => !recentIds.has(s.id));
         const query = ui.inputs.repoSearch.value.toLowerCase();
 
-        // Show recents only when the search is empty
         if (query === '' && recentRepos.length > 0) {
             ui.repoResults.appendChild(createHeader('Recently Used'));
             recentRepos.forEach(repo => ui.repoResults.appendChild(createItem(repo)));
@@ -144,12 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Add the filtered list of all sources
         if (nonRecentSources.length > 0) {
             nonRecentSources.forEach(source => ui.repoResults.appendChild(createItem(source)));
         }
 
-        // Handle no results case
         if (ui.repoResults.children.length === 0) {
             ui.repoResults.innerHTML = '<div class="_jules_no-match">No matches</div>';
         }
@@ -256,7 +250,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.buttons.viewHistory.addEventListener('click', () => {
             switchView('history');
-            // Immediately clear the list and show the spinner on click.
             ui.historyList.innerHTML = '';
             toggleSpinner('history', true);
             chrome.runtime.sendMessage({ action: "fetchHistory" });
@@ -369,7 +362,6 @@ document.addEventListener('DOMContentLoaded', () => {
             highlightBranchItem(newIndex);
         });
 
-        // Repo search input events
         ui.inputs.repoSearch.addEventListener('input', () => {
             const query = ui.inputs.repoSearch.value.toLowerCase();
             const filtered = allSources.filter(s => s.name.toLowerCase().includes(query));
@@ -413,12 +405,10 @@ document.addEventListener('DOMContentLoaded', () => {
             highlightRepoItem(newIndex);
         });
 
-        // Close popup handler
         window.addEventListener('unload', () => {
             chrome.runtime.sendMessage({ action: "popupClosed" });
         });
 
-        // Log capture toggle handler
         ui.toggles.captureLogs.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
             ui.explanations.log.style.display = isEnabled ? 'block' : 'none';
@@ -433,7 +423,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.toggles.captureCSS.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
-            // Also hide the preview and its label
             const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
             if (cssPreviewLabel) {
                 cssPreviewLabel.style.display = isEnabled ? 'block' : 'none';
@@ -460,7 +449,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         ui.inputs.repoSearch.disabled = true;
                     }
 
-                    // Repopulate with the latest list, preserving any search query
                     const currentQuery = ui.inputs.repoSearch.value.toLowerCase();
                     const filtered = allSources.filter(s => s.name.toLowerCase().includes(currentQuery));
                     populateRepoResults(filtered);
@@ -483,17 +471,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
 
                 case "julesError":
-                    // Check if the history list is already populated from cache
                     const isHistoryVisible = ui.views.history.style.display !== 'none';
                     const hasCachedHistory = ui.historyList.children.length > 0 && ui.historyList.children[0].className === 'history-card';
 
                     if (isHistoryVisible && hasCachedHistory) {
-                        // If we are in the history view and have cached data,
-                        // show a less intrusive error.
                         setStatus("Failed to refresh history.", true);
-                        toggleSpinner('history', false); // Hide the spinner
+                        toggleSpinner('history', false);
                     } else {
-                        // Otherwise, show the full error.
                         toggleSpinner('repo', false);
                         toggleSpinner('submit', false);
                         toggleSpinner('history', false);
@@ -503,8 +487,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
 
                 case "historyLoaded":
-                    // If this is fresh data, hide the spinner.
-                    // If it's cached data, we don't hide it, because a fetch is in progress.
                     if (!message.isFromCache) {
                         toggleSpinner('history', false);
                     }
@@ -515,12 +497,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderHistory(history, isFromCache) {
-        // The spinner is now managed by the caller, so we only handle rendering.
-        // We also only clear the list right before rendering new content.
         ui.historyList.innerHTML = '';
 
         if (!history || history.length === 0) {
-            // Only show "No tasks" message if this is the final data (not from cache)
             if (!isFromCache) {
                 ui.historyList.innerHTML = '<div class="history-item">No recent tasks found.</div>';
             }
@@ -554,7 +533,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupMessageListeners();
 
-        // Restore persisted task prompt text
         chrome.runtime.sendMessage({ action: "popupOpened" }, (response) => {
             if (response && response.taskPromptText) {
                 ui.inputs.taskPrompt.value = response.taskPromptText;
@@ -571,17 +549,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             recentRepos = response.recentRepos || [];
 
-            // Set the initial state of the log capture toggle
             const isLogging = response.isLogging || false;
             ui.toggles.captureLogs.checked = isLogging;
             ui.explanations.log.style.display = isLogging ? 'block' : 'none';
 
-            // Set the initial state of the network capture toggle
             const isCapturingNetwork = response.isCapturingNetwork || false;
             ui.toggles.captureNetwork.checked = isCapturingNetwork;
             ui.explanations.network.style.display = isCapturingNetwork ? 'block' : 'none';
 
-            // Determine the view
             const viewToDisplay = response.view || 'select';
 
             if (response.state === 'elementCaptured' && response.capturedHtml) {
@@ -589,10 +564,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 ui.previews.selector.querySelector('code').textContent = response.capturedSelector || 'No selector captured.';
                 ui.containers.cssCapture.style.display = 'block';
 
-                const isCapturingCSS = response.isCapturingCSS ?? false; // Default to false
+                const isCapturingCSS = response.isCapturingCSS ?? false;
                 ui.toggles.captureCSS.checked = isCapturingCSS;
 
-                // Hide preview and label initially
                 const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
                 if (cssPreviewLabel) {
                     cssPreviewLabel.style.display = 'none';
@@ -606,7 +580,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     ui.previews.css.style.display = 'block';
                 }
 
-                // Format and display the captured CSS
                 if (response.capturedCss) {
                     let formattedCss = '';
                     for (const [state, properties] of Object.entries(response.capturedCss)) {
@@ -626,13 +599,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             switchView(viewToDisplay);
             if (viewToDisplay === 'history') {
-                // Immediately clear the list and show the spinner on load.
                 ui.historyList.innerHTML = '';
                 toggleSpinner('history', true);
                 chrome.runtime.sendMessage({ action: "fetchHistory" });
             }
 
-            // Initial population of results if sources are already cached
             if (allSources.length > 0) {
                 populateRepoResults(allSources);
             }
