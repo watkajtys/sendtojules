@@ -1,6 +1,7 @@
 // Global state
 let capturedData = null;
 let capturedLogs = [];
+let capturedNetworkActivity = [];
 
 // Debugging state is now managed in chrome.storage.local
 // { debuggingTabId: number | null }
@@ -45,8 +46,9 @@ async function resetDebuggerState() {
             }
         });
     }
-    await chrome.storage.local.remove('debuggingTabId');
+    await chrome.storage.local.remove(['debuggingTabId', 'isCapturingLogs', 'isCapturingNetwork']);
     capturedLogs = [];
+    capturedNetworkActivity = [];
     console.log("Jules debugger state reset.");
 }
 
@@ -130,6 +132,13 @@ async function createJulesSession(task, data, sourceName, apiKey, logs) {
         prompt += `\n\n--- Captured Console Logs ---\n${formattedLogs}\n--- End Logs ---`;
     }
 
+    if (capturedNetworkActivity && capturedNetworkActivity.length > 0) {
+        const formattedNetwork = capturedNetworkActivity.map(req => {
+            return `[${new Date(req.timestamp * 1000).toISOString()}] ${req.method} ${req.url} - Status: ${req.status}\nResponse Body (truncated):\n${req.responseBody || 'N/A'}`;
+        }).join('\n\n');
+        prompt += `\n\n--- Captured Network Activity ---\n${formattedNetwork}\n--- End Network Activity ---`;
+    }
+
     const payload = {
         prompt: prompt,
         sourceContext: {
@@ -187,13 +196,18 @@ async function handleGetPopupData(sendResponse) {
 
         const { viewState } = await chrome.storage.session.get('viewState');
 
-        const localResult = await chrome.storage.local.get({ mostRecentRepos: [], debuggingTabId: null });
+        const localResult = await chrome.storage.local.get({
+            mostRecentRepos: [],
+            isCapturingLogs: false,
+            isCapturingNetwork: false
+        });
 
         sendResponse({
             state: state,
             capturedHtml: capturedData ? capturedData.outerHTML : null,
             recentRepos: localResult.mostRecentRepos,
-            isLogging: !!localResult.debuggingTabId,
+            isLogging: localResult.isCapturingLogs,
+            isCapturingNetwork: localResult.isCapturingNetwork,
             view: viewState
         });
     } catch (error) {
@@ -279,13 +293,37 @@ async function handleSubmitTask(message) {
 // --- Debugger Logic ---
 
 function onDebuggerEvent(debuggeeId, method, params) {
-    // Check storage to ensure we are only logging the correct tab.
     chrome.storage.local.get('debuggingTabId', ({ debuggingTabId }) => {
         if (!debuggingTabId || debuggeeId.tabId !== debuggingTabId) {
             return;
         }
 
-        if (method === 'Runtime.consoleAPICalled') {
+        if (method === 'Network.requestWillBeSent') {
+            capturedNetworkActivity.push({
+                requestId: params.requestId,
+                url: params.request.url,
+                method: params.request.method,
+                headers: params.request.headers,
+                timestamp: params.timestamp,
+            });
+        } else if (method === 'Network.responseReceived') {
+            const request = capturedNetworkActivity.find(req => req.requestId === params.requestId);
+            if (request) {
+                request.status = params.response.status;
+                request.responseHeaders = params.response.headers;
+
+                chrome.debugger.sendCommand(
+                    { tabId: debuggingTabId },
+                    "Network.getResponseBody",
+                    { requestId: params.requestId },
+                    (response) => {
+                        if (response && response.body) {
+                            request.responseBody = response.body.substring(0, 500); // Truncate
+                        }
+                    }
+                );
+            }
+        } else if (method === 'Runtime.consoleAPICalled') {
             const logEntry = {
                 timestamp: new Date(params.timestamp).toISOString(),
                 level: params.type,
@@ -299,31 +337,71 @@ function onDebuggerEvent(debuggeeId, method, params) {
     });
 }
 
+async function manageDebuggerState(tabId) {
+    // Fetches the desired state from storage, which is set by the toggle handlers.
+    const { isCapturingLogs, isCapturingNetwork, debuggingTabId } = await chrome.storage.local.get([
+        'isCapturingLogs',
+        'isCapturingNetwork',
+        'debuggingTabId'
+    ]);
+
+    const shouldBeDebugging = isCapturingLogs || isCapturingNetwork;
+    const isCurrentlyDebugging = !!debuggingTabId;
+
+    try {
+        // Case 1: We need to start debugging.
+        if (shouldBeDebugging && !isCurrentlyDebugging) {
+            await chrome.debugger.attach({ tabId }, DEBUGGER_VERSION);
+            await chrome.storage.local.set({ debuggingTabId: tabId });
+             // Enable domains based on the new state.
+            if (isCapturingLogs) await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+            if (isCapturingNetwork) await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+            console.log("Jules debugger attached and domains configured.");
+        }
+        // Case 2: We need to stop debugging entirely.
+        else if (!shouldBeDebugging && isCurrentlyDebugging) {
+             await resetDebuggerState(); // resetDebuggerState handles detach and cleanup.
+        }
+        // Case 3: We are already debugging, just need to adjust domains.
+        else if (shouldBeDebugging && isCurrentlyDebugging) {
+            if (tabId !== debuggingTabId) {
+                 console.warn("Attempted to manage debugger on a different tab. This shouldn't happen.");
+                 return;
+            }
+             // Enable/disable domains based on current toggle states.
+            if (isCapturingLogs) {
+                await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+            } else {
+                await chrome.debugger.sendCommand({ tabId }, 'Runtime.disable').catch(() => {}); // Ignore errors if not enabled
+            }
+
+            if (isCapturingNetwork) {
+                await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+            } else {
+                await chrome.debugger.sendCommand({ tabId }, 'Network.disable').catch(() => {}); // Ignore errors if not enabled
+            }
+            console.log("Jules debugger domains updated.");
+        }
+    } catch (err) {
+        console.error("Error managing debugger state:", err);
+        chrome.runtime.sendMessage({ action: "julesError", error: `Debugger error: ${err.message}` });
+        await resetDebuggerState(); // Clean up on any failure.
+    }
+}
+
+
 async function handleToggleLogCapture(message) {
     const { enabled } = message;
+    await chrome.storage.local.set({ isCapturingLogs: enabled });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) await manageDebuggerState(tab.id);
+}
 
-    if (enabled) {
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab || !tab.id) return;
-
-            // Important: Attach the debugger *before* setting state,
-            // so that our onDetach listener can clean up correctly if attach fails.
-            await chrome.debugger.attach({ tabId: tab.id }, DEBUGGER_VERSION);
-            await chrome.storage.local.set({ debuggingTabId: tab.id });
-            console.log("Jules debugger attached to tab:", tab.id);
-
-            // Enable the runtime domain to receive console events
-            await chrome.debugger.sendCommand({ tabId: tab.id }, 'Runtime.enable');
-
-        } catch (err) {
-            console.error("Error attaching debugger:", err);
-            chrome.runtime.sendMessage({ action: "julesError", error: `Failed to start debugger: ${err.message}` });
-            await resetDebuggerState(); // Ensure cleanup on failure
-        }
-    } else {
-        await resetDebuggerState();
-    }
+async function handleToggleNetworkCapture(message) {
+    const { enabled } = message;
+    await chrome.storage.local.set({ isCapturingNetwork: enabled });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) await manageDebuggerState(tab.id);
 }
 
 // --- Event Listeners ---
@@ -357,6 +435,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'toggleLogCapture':
             handleToggleLogCapture(message);
             return true;
+        case 'toggleNetworkCapture':
+            handleToggleNetworkCapture(message);
+            return true;
     }
 });
 
@@ -383,12 +464,22 @@ chrome.tabs.onActivated.addListener(async () => {
 chrome.debugger.onEvent.addListener(onDebuggerEvent);
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
+    const { debuggingTabId, isCapturingLogs, isCapturingNetwork } = await chrome.storage.local.get([
+        'debuggingTabId',
+        'isCapturingLogs',
+        'isCapturingNetwork'
+    ]);
+
     if (tabId === debuggingTabId && changeInfo.status === 'complete') {
         try {
-            // Re-enable the runtime to ensure we keep capturing logs after navigation
-            await chrome.debugger.sendCommand({ tabId: tabId }, 'Runtime.enable');
-            console.log("Jules debugger re-enabled runtime on tab:", tabId);
+            if (isCapturingLogs) {
+                await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+                console.log("Jules debugger re-enabled Runtime on tab:", tabId);
+            }
+            if (isCapturingNetwork) {
+                await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+                console.log("Jules debugger re-enabled Network on tab:", tabId);
+            }
         } catch (err) {
             console.error("Error re-enabling runtime on navigation:", err);
             // If the command fails, it might mean the debugger was detached.
