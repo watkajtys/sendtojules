@@ -2,7 +2,7 @@
 
 // This module handles all fetch calls to the Jules API.
 
-import { capturedNetworkActivity, resetState } from './state.js';
+import { getCapturedNetworkActivity, resetState, getSourcesCache, setSourcesCache, getHistoryCache, setHistoryCache } from './state.js';
 
 const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
 
@@ -14,14 +14,13 @@ const API_BASE_URL = 'https://jules.googleapis.com/v1alpha';
  */
 export async function fetchSources(apiKey) {
     // 1. Immediately send cached data if it exists.
-    chrome.storage.local.get('julesSourcesCache', (result) => {
-        if (result.julesSourcesCache && result.julesSourcesCache.sources) {
-            chrome.runtime.sendMessage({
-                action: "sourcesLoaded",
-                sources: result.julesSourcesCache.sources
-            });
-        }
-    });
+    const cachedSources = getSourcesCache();
+    if (cachedSources && cachedSources.sources) {
+        chrome.runtime.sendMessage({
+            action: "sourcesLoaded",
+            sources: cachedSources.sources
+        });
+    }
 
     // 2. Always fetch fresh data in the background.
     const sourcesApiUrl = `${API_BASE_URL}/sources`;
@@ -50,20 +49,16 @@ export async function fetchSources(apiKey) {
         }));
 
         // 3. Compare with cache and update if necessary.
-        const result = await chrome.storage.local.get('julesSourcesCache');
-        const oldSources = result.julesSourcesCache ? result.julesSourcesCache.sources : null;
+        const oldSources = getSourcesCache() ? getSourcesCache().sources : null;
 
         if (JSON.stringify(oldSources) !== JSON.stringify(newSources)) {
-            await chrome.storage.local.set({
-                julesSourcesCache: { sources: newSources, timestamp: Date.now() }
-            });
+            await setSourcesCache({ sources: newSources, timestamp: Date.now() });
             const action = oldSources ? "sourcesRefreshed" : "sourcesLoaded";
             chrome.runtime.sendMessage({ action: action, sources: newSources });
         }
     } catch (error) {
         console.error('Failed to fetch sources:', error);
-        const result = await chrome.storage.local.get('julesSourcesCache');
-        if (!result.julesSourcesCache) {
+        if (!getSourcesCache()) {
             chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch sources." });
         }
     }
@@ -121,8 +116,10 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
         const formattedLogs = logs.map(log => `[${log.timestamp}] [${log.level}] ${log.message}`).join('\n');
         prompt += `\n\n--- Captured Console Logs ---\n${formattedLogs}\n--- End Logs ---`;
     }
-    if (capturedNetworkActivity && capturedNetworkActivity.length > 0) {
-        const formattedNetwork = capturedNetworkActivity.map(req => {
+
+    const networkActivity = getCapturedNetworkActivity();
+    if (networkActivity && networkActivity.length > 0) {
+        const formattedNetwork = networkActivity.map(req => {
             return `[${new Date(req.timestamp * 1000).toISOString()}] ${req.method} ${req.url} - Status: ${req.status}\nResponse Body (truncated):\n${req.responseBody || 'N/A'}`;
         }).join('\n\n');
         prompt += `\n\n--- Captured Network Activity ---\n${formattedNetwork}\n--- End Network Activity ---`;
@@ -151,7 +148,6 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
 
         const sessionData = await response.json();
         chrome.runtime.sendMessage({ action: "julesResponse", data: sessionData });
-        await chrome.storage.local.remove('julesHistoryCache');
     } catch (error) {
         console.error('Failed to create Jules session:', error);
         chrome.runtime.sendMessage({ action: "julesError", error: error.message });
@@ -167,18 +163,15 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
  * @param {string} apiKey - The user's API key.
  */
 export async function fetchHistory(apiKey) {
-    const HISTORY_CACHE_KEY = 'julesHistoryCache';
-
     // 1. Immediately send cached data
-    chrome.storage.local.get(HISTORY_CACHE_KEY, (result) => {
-        if (result[HISTORY_CACHE_KEY] && result[HISTORY_CACHE_KEY].sessions) {
-            chrome.runtime.sendMessage({
-                action: "historyLoaded",
-                history: result[HISTORY_CACHE_KEY].sessions,
-                isFromCache: true
-            });
-        }
-    });
+    const cachedHistory = getHistoryCache();
+    if (cachedHistory && cachedHistory.sessions) {
+        chrome.runtime.sendMessage({
+            action: "historyLoaded",
+            history: cachedHistory.sessions,
+            isFromCache: true
+        });
+    }
 
     // 2. Fetch fresh data
     const sessionsApiUrl = `${API_BASE_URL}/sessions?pageSize=5`;
@@ -195,18 +188,16 @@ export async function fetchHistory(apiKey) {
         const data = await response.json();
         const newHistory = data.sessions || [];
 
-        const result = await chrome.storage.local.get(HISTORY_CACHE_KEY);
-        const oldHistory = result[HISTORY_CACHE_KEY] ? result[HISTORY_CACHE_KEY].sessions : null;
+        const oldHistory = getHistoryCache() ? getHistoryCache().sessions : null;
 
         if (JSON.stringify(oldHistory) !== JSON.stringify(newHistory)) {
-            await chrome.storage.local.set({ [HISTORY_CACHE_KEY]: { sessions: newHistory } });
+            await setHistoryCache({ sessions: newHistory });
         }
         chrome.runtime.sendMessage({ action: "historyLoaded", history: newHistory, isFromCache: false });
 
     } catch (error) {
         console.error('Failed to fetch session history:', error);
-        const result = await chrome.storage.local.get(HISTORY_CACHE_KEY);
-        if (!result[HISTORY_CACHE_KEY]) {
+        if (!getHistoryCache()) {
             chrome.runtime.sendMessage({ action: "julesError", error: "Could not fetch session history." });
         }
     }
