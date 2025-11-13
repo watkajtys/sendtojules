@@ -36,18 +36,24 @@ function resetState(forceFullReset = false) {
 }
 
 async function detachDebugger() {
-    // This function's sole purpose is to detach the debugger.
-    // The onDetach event listener will handle cleaning up state.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
-    if (debuggingTabId) {
-        await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
-            // It's fine if it's already detached.
-            if (!err.message.includes("No debugger with given target id") &&
-                !err.message.includes("Target is not attached")) {
-                console.error("Error detaching debugger:", err);
-            }
-        });
-    }
+    if (!debuggingTabId) return;
+
+    // Proactively clear state to prevent race conditions.
+    // The onDetach listener will now act as a safeguard.
+    await chrome.storage.local.remove('debuggingTabId');
+    capturedLogs = [];
+    capturedNetworkActivity = [];
+    console.log(`Proactively cleared state for tab ${debuggingTabId}`);
+
+    // Now, perform the detach operation.
+    await chrome.debugger.detach({ tabId: debuggingTabId }).catch(err => {
+        // It's fine if it's already detached, as we've cleared the state.
+        if (!err.message.includes("No debugger with given target id") &&
+            !err.message.includes("Target is not attached")) {
+            console.error("Error during debugger detach call:", err);
+        }
+    });
 }
 
 
@@ -554,12 +560,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 });
 
 chrome.debugger.onDetach.addListener(async (source, reason) => {
+    // This listener now acts as a safeguard for unexpected detaches (e.g., user closes tab).
+    // Proactive cleanup is handled in the `detachDebugger` function.
     const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
-    if (source.tabId === debuggingTabId) {
-        console.log(`Jules debugger detached from tab ${source.tabId}. Reason: ${reason}. Cleaning up session state.`);
-        // This is the central cleanup location. It runs whenever the debugger is detached for any reason.
-        // We only clear the debuggingTabId, preserving the toggle states (isCapturingLogs, isCapturingNetwork)
-        // so the UI remains consistent with the user's intent.
+
+    // If a debuggingTabId still exists and it matches the detached tab, it means
+    // the detach was not initiated by our `detachDebugger` function, so we need to clean up.
+    if (debuggingTabId && source.tabId === debuggingTabId) {
+        console.log(`Jules debugger detached unexpectedly from tab ${source.tabId}. Reason: ${reason}. Cleaning up.`);
         await chrome.storage.local.remove('debuggingTabId');
         capturedLogs = [];
         capturedNetworkActivity = [];
