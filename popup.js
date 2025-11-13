@@ -19,6 +19,12 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedRepo: document.getElementById('selectedRepo'),
             taskPrompt: document.getElementById('taskPrompt'),
         },
+        toggles: {
+            captureLogs: document.getElementById('captureLogsToggle'),
+        },
+        explanations: {
+            log: document.getElementById('logExplanation'),
+        },
         spinners: {
             repo: document.getElementById('repoLoadingSpinner'),
             submit: document.getElementById('submitSpinner'),
@@ -233,6 +239,13 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('unload', () => {
             chrome.runtime.sendMessage({ action: "popupClosed" });
         });
+
+        // Log capture toggle handler
+        ui.toggles.captureLogs.addEventListener('change', (e) => {
+            const isEnabled = e.target.checked;
+            ui.explanations.log.style.display = isEnabled ? 'block' : 'none';
+            chrome.runtime.sendMessage({ action: "toggleLogCapture", enabled: isEnabled });
+        });
     }
 
     // --- Message Listeners from Background ---
@@ -298,6 +311,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             recentRepos = response.recentRepos || [];
+
+            // Set the initial state of the log capture toggle
+            const isLogging = response.isLogging || false;
+            ui.toggles.captureLogs.checked = isLogging;
+            ui.explanations.log.style.display = isLogging ? 'block' : 'none';
 
             if (response.state === 'elementCaptured') {
                 ui.codePreview.querySelector('code').textContent = response.capturedHtml || 'No HTML captured.';
