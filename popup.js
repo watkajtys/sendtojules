@@ -22,9 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         toggles: {
             captureLogs: document.getElementById('captureLogsToggle'),
+            captureNetwork: document.getElementById('captureNetworkToggle'),
         },
         explanations: {
             log: document.getElementById('logExplanation'),
+            network: document.getElementById('networkExplanation'),
         },
         spinners: {
             repo: document.getElementById('repoLoadingSpinner'),
@@ -258,6 +260,12 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.explanations.log.style.display = isEnabled ? 'block' : 'none';
             chrome.runtime.sendMessage({ action: "toggleLogCapture", enabled: isEnabled });
         });
+
+        ui.toggles.captureNetwork.addEventListener('change', (e) => {
+            const isEnabled = e.target.checked;
+            ui.explanations.network.style.display = isEnabled ? 'block' : 'none';
+            chrome.runtime.sendMessage({ action: "toggleNetworkCapture", enabled: isEnabled });
+        });
     }
 
     // --- Message Listeners from Background ---
@@ -335,6 +343,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const isLogging = response.isLogging || false;
             ui.toggles.captureLogs.checked = isLogging;
             ui.explanations.log.style.display = isLogging ? 'block' : 'none';
+
+            // Set the initial state of the network capture toggle
+            const isCapturingNetwork = response.isCapturingNetwork || false;
+            ui.toggles.captureNetwork.checked = isCapturingNetwork;
+            ui.explanations.network.style.display = isCapturingNetwork ? 'block' : 'none';
 
             // Determine the view
             const viewToDisplay = response.view || 'select';
