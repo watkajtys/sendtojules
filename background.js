@@ -124,15 +124,10 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
     let prompt = cleanTask;
 
     if (data && data.outerHTML) {
-        // Construct a more detailed context string when data is available
-        let contextString = `Tag: ${data.tag}`;
-        if (data.id) contextString += `, ID: ${data.id}`;
-        if (data.classes) contextString += `, Classes: ${data.classes}`;
+        prompt += `\n\nThe user has selected the following HTML element:\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
 
         if (data.selector) {
-            prompt = `${cleanTask}\n\nHere is the CSS selector for the element I selected:\n\`\`\`css\n${data.selector}\n\`\`\`\n\nAnd here is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
-        } else {
-            prompt = `${cleanTask}\n\nHere is the HTML context for the element I selected (${contextString}):\n\`\`\`html\n${data.outerHTML}\n\`\`\``;
+            prompt += `\n\nThe element is located at the following DOM Path:\n\`\`\`css\n${data.selector}\n\`\`\``;
         }
     }
 
@@ -159,7 +154,7 @@ async function createJulesSession(task, data, sourceName, apiKey, logs, isCaptur
             }
         }
         if (formattedCss) {
-            prompt += `\n\n--- Captured Computed CSS ---\n\`\`\`css\n${formattedCss.trim()}\n\`\`\``;
+            prompt += `\n\nThe element has the following computed CSS styles:\n\`\`\`css\n${formattedCss.trim()}\n\`\`\``;
         }
     }
 
