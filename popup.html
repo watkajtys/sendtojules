@@ -81,7 +81,7 @@
             color            : var(--text-primary);
         }
 
-        #selectElement, #reselect, #createTaskWithoutSelection {
+        #selectElement, #reselect, #createTaskWithoutSelection, #cancelTask {
             background-color : var(--bg-secondary);
             border           : 1px solid var(--border-primary);
         }
@@ -382,8 +382,9 @@
         When enabled, a banner will appear stating this extension is debugging the browser. This is required to capture all console logs for troubleshooting.
     </div>
 
-    <button id="submitTask">2. Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
-    <button id="reselect">Reselect Element</button>
+    <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
+    <button id="reselect">Reselect</button>
+    <button id="cancelTask">Cancel</button>
 </div>
 
 <div id="resultView">

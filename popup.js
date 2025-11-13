@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
             createTaskWithoutSelection: document.getElementById('createTaskWithoutSelection'),
             submit: document.getElementById('submitTask'),
             reselect: document.getElementById('reselect'),
+            cancelTask: document.getElementById('cancelTask'),
             startOver: document.getElementById('startOver'),
             clearRepo: document.getElementById('clearRepoSelection'),
         },
@@ -50,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Use 'flex' for the result view as defined in the CSS, 'block' for others.
             viewToShow.style.display = viewName === 'result' ? 'flex' : 'block';
         }
+        // Persist the current view state
+        chrome.storage.session.set({ 'viewState': viewName });
     }
 
     // --- UI Helpers ---
@@ -142,15 +145,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Handlers ---
     function setupEventListeners() {
+        ui.inputs.taskPrompt.addEventListener('input', (e) => {
+            chrome.runtime.sendMessage({ action: 'saveTaskPrompt', text: e.target.value });
+        });
+
         ui.buttons.select.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "startSelection" });
             window.close();
         });
 
         ui.buttons.createTaskWithoutSelection.addEventListener('click', () => {
-            // No element is selected, so we clear any lingering state
-            // and switch directly to the task submission view.
-            chrome.runtime.sendMessage({ action: "cancelSelection" }); // Resets background state
+            // This button is now for switching to the task view without an element,
+            // but we don't need to reset the world anymore. The background decides the state.
             ui.codePreview.querySelector('code').textContent = 'No element selected.';
             switchView('task');
         });
@@ -178,6 +184,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         ui.buttons.startOver.addEventListener('click', () => {
+            chrome.runtime.sendMessage({ action: "cancelSelection" });
+            switchView('select');
+            setStatus('');
+        });
+
+        ui.buttons.cancelTask.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "cancelSelection" });
             switchView('select');
             setStatus('');
@@ -302,6 +314,13 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupMessageListeners();
 
+        // Restore persisted task prompt text
+        chrome.runtime.sendMessage({ action: "popupOpened" }, (response) => {
+            if (response && response.taskPromptText) {
+                ui.inputs.taskPrompt.value = response.taskPromptText;
+            }
+        });
+
         toggleSpinner('repo', true);
         chrome.runtime.sendMessage({ action: "getPopupData" }, (response) => {
             if (chrome.runtime.lastError) {
@@ -317,16 +336,21 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.toggles.captureLogs.checked = isLogging;
             ui.explanations.log.style.display = isLogging ? 'block' : 'none';
 
+            // Determine the view
+            const viewToDisplay = response.view || 'select';
+
             if (response.state === 'elementCaptured') {
                 ui.codePreview.querySelector('code').textContent = response.capturedHtml || 'No HTML captured.';
-                switchView('task');
-                // Initial population of results if sources are already cached
-                if (allSources.length > 0) {
-                     populateRepoResults(allSources);
-                }
             } else {
-                switchView('select');
+                ui.codePreview.querySelector('code').textContent = 'No element selected.';
             }
+            switchView(viewToDisplay);
+
+            // Initial population of results if sources are already cached
+            if (allSources.length > 0) {
+                populateRepoResults(allSources);
+            }
+
             updateClearButtonVisibility();
         });
     }
