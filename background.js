@@ -247,7 +247,7 @@ async function handleStartSelection() {
 
 function handleElementCaptured(message) {
     capturedData = message.data;
-    chrome.storage.session.set({ 'julesCapturedData': message.data });
+    chrome.storage.session.set({ 'julesCapturedData': message.data, 'viewState': 'task' });
     chrome.action.setBadgeText({ text: '✅' });
     chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
 }
