@@ -12,25 +12,26 @@ const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // --- State Management ---
 
-function resetState() {
+function resetState(forceFullReset = false) {
     capturedData = null;
     chrome.action.setBadgeText({ text: '' });
 
-    // Proactively clean up content scripts in the last known tab
-    chrome.storage.session.get(['julesCapturedTabId'], (result) => {
-        const tabId = result.julesCapturedTabId;
-        if (tabId) {
-            chrome.tabs.sendMessage(tabId, { action: "cleanupSelector" }).catch(err => {
-                // Ignore errors if the tab was closed, but log others.
-                if (!err.message.includes("Receiving end does not exist.")) {
-                    console.error("Error sending cleanup message:", err);
-                }
-            });
-        }
-    });
-
-    // Clear all session data
-    chrome.storage.session.remove(['julesCapturedData', 'julesCapturedTabId']);
+    if (forceFullReset) {
+        // Proactively clean up content scripts in the last known tab
+        chrome.storage.session.get(['julesCapturedTabId'], (result) => {
+            const tabId = result.julesCapturedTabId;
+            if (tabId) {
+                chrome.tabs.sendMessage(tabId, { action: "cleanupSelector" }).catch(err => {
+                    // Ignore errors if the tab was closed, but log others.
+                    if (!err.message.includes("Receiving end does not exist.")) {
+                        console.error("Error sending cleanup message:", err);
+                    }
+                });
+            }
+        });
+        // Clear all session data
+        chrome.storage.session.remove(['julesCapturedData', 'julesCapturedTabId', 'viewState', 'taskPromptText']);
+    }
 }
 
 async function resetDebuggerState() {
@@ -162,7 +163,7 @@ async function createJulesSession(task, data, sourceName, apiKey, logs) {
         console.error('Failed to create Jules session:', error);
         chrome.runtime.sendMessage({ action: "julesError", error: error.message });
     } finally {
-        resetState();
+        resetState(true); // Perform a full reset
     }
 }
 
@@ -174,7 +175,17 @@ async function handleGetPopupData(sendResponse) {
     try {
         const sessionResult = await chrome.storage.session.get(['julesCapturedData']);
         capturedData = sessionResult.julesCapturedData || null;
-        const state = capturedData ? 'elementCaptured' : 'readyToSelect';
+
+        const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        // If we are debugging and the active tab is the debugged tab, the state is captured.
+        // Otherwise, it's ready to select. This prevents showing stale data on non-debugged tabs.
+        const state = (debuggingTabId && activeTab.id === debuggingTabId && capturedData)
+            ? 'elementCaptured'
+            : 'readyToSelect';
+
+        const { viewState } = await chrome.storage.session.get('viewState');
 
         const localResult = await chrome.storage.local.get({ mostRecentRepos: [], debuggingTabId: null });
 
@@ -182,7 +193,8 @@ async function handleGetPopupData(sendResponse) {
             state: state,
             capturedHtml: capturedData ? capturedData.outerHTML : null,
             recentRepos: localResult.mostRecentRepos,
-            isLogging: !!localResult.debuggingTabId
+            isLogging: !!localResult.debuggingTabId,
+            view: viewState
         });
     } catch (error) {
         console.error("Error getting popup data:", error);
@@ -201,7 +213,7 @@ async function handleGetPopupData(sendResponse) {
 }
 
 async function handleStartSelection() {
-    resetState();
+    resetState(true); // Full reset
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -318,6 +330,15 @@ async function handleToggleLogCapture(message) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
+        case 'popupOpened':
+            // When the popup opens, send back any persisted text.
+            chrome.storage.session.get('taskPromptText', (result) => {
+                sendResponse({ taskPromptText: result.taskPromptText });
+            });
+            return true; // Keep channel open for async response
+        case 'saveTaskPrompt':
+            chrome.storage.session.set({ taskPromptText: message.text });
+            break;
         case 'getPopupData':
             handleGetPopupData(sendResponse);
             return true; // Keep message channel open for async response
@@ -328,16 +349,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             handleElementCaptured(message);
             break;
         case 'cancelSelection':
-            resetState();
+            resetState(true); // Full reset
             break;
         case 'submitTask':
             handleSubmitTask(message);
             return true;
-        case 'popupClosed':
-            // We no longer reset the debugger state when the popup closes.
-            // It now persists until the task is submitted or the tab is closed.
-            resetState();
-            break;
         case 'toggleLogCapture':
             handleToggleLogCapture(message);
             return true;
@@ -345,8 +361,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Reset element selection state when the user switches tabs
-chrome.tabs.onActivated.addListener(() => {
-    resetState();
+chrome.tabs.onActivated.addListener(async () => {
+    const { debuggingTabId } = await chrome.storage.local.get('debuggingTabId');
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    // Only reset the non-persistent state. If the activated tab is not the one being debugged,
+    // we don't want to show the '✅' badge, but we also don't want to clear the session data.
+    if (!debuggingTabId || activeTab.id !== debuggingTabId) {
+        resetState(false); // Pass false to prevent clearing session data
+    } else {
+        // If we are switching back to the debugged tab, restore the badge.
+        const { julesCapturedData } = await chrome.storage.session.get('julesCapturedData');
+        if (julesCapturedData) {
+            chrome.action.setBadgeText({ text: '✅' });
+            chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+        }
+    }
 });
 
 // Handle debugger lifecycle events
