@@ -55,7 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         historyList: document.getElementById('historyList'),
         repoResults: document.getElementById('repoResults'),
-        codePreview: document.getElementById('codePreview'),
         resultTitle: document.getElementById('resultTitle'),
         resultSubtitle: document.getElementById('resultSubtitle'),
         sessionLink: document.getElementById('sessionLink'),
