@@ -9,39 +9,32 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
 (async () => {
     const stateManager = await initState();
 
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error) => console.error(error));
+
     // --- Message Handlers ---
 
-    async function handleGetPopupData(sendResponse) {
+    async function handleGetSidePanelData(sendResponse) {
         try {
             const state = stateManager.getState();
-            const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-            const isElementCaptured = (state.julesCapturedData && state.julesCapturedTabId && activeTab.id === state.julesCapturedTabId);
-            const viewState = isElementCaptured ? 'elementCaptured' : 'readyToSelect';
-
             sendResponse({
-                state: viewState,
-                capturedHtml: isElementCaptured ? state.julesCapturedData.outerHTML : null,
-                capturedSelector: isElementCaptured ? state.julesCapturedData.selector : null,
-                capturedCss: isElementCaptured ? state.julesCapturedData.computedCss : null,
-                recentRepos: state.mostRecentRepos,
-                isLogging: state.isCapturingLogs,
+                taskPrompt: state.taskPromptText,
+                selectedRepo: state.mostRecentRepos.length > 0 ? state.mostRecentRepos[0] : null,
+                selectedBranch: state.mostRecentRepos.length > 0 ? state.mostRecentRepos[0].githubRepo.defaultBranch.displayName : null,
+                isCapturingLogs: state.isCapturingLogs,
                 isCapturingNetwork: state.isCapturingNetwork,
                 isCapturingCSS: state.isCapturingCSS,
-                view: state.viewState
+                selectedElement: state.julesCapturedData,
+                allSources: stateManager.getSourcesCache()?.sources || [],
+                recentRepos: state.mostRecentRepos,
             });
-
         } catch (error) {
-            console.error("Error getting popup data:", error);
+            console.error("Error getting side panel data:", error);
             sendResponse({ error: "Failed to retrieve initial data." });
         }
-
-        chrome.storage.sync.get(['julesApiKey'], (result) => {
-            if (!result.julesApiKey) {
-                chrome.runtime.sendMessage({ action: 'julesError', error: "API Key not set" });
-                return;
+         chrome.storage.sync.get(['julesApiKey'], (result) => {
+            if (result.julesApiKey) {
+                fetchSources(result.julesApiKey, stateManager);
             }
-            fetchSources(result.julesApiKey, stateManager);
         });
     }
 
@@ -94,23 +87,18 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         switch (message.action) {
-            case 'popupOpened':
-                sendResponse({ taskPromptText: stateManager.getState().taskPromptText });
-                return true; // Keep the message channel open for sendResponse
             case 'saveTaskPrompt':
                 stateManager.setTaskPromptText(message.text);
                 break;
-            case 'setViewState':
-                stateManager.setViewState(message.view);
-                break;
-            case 'getPopupData':
-                handleGetPopupData(sendResponse);
+            case 'getSidePanelData':
+                handleGetSidePanelData(sendResponse);
                 return true;
             case 'startSelection':
                 handleStartSelection();
                 break;
             case 'elementCaptured':
                 stateManager.setCapturedData(message.data);
+                chrome.runtime.sendMessage({ action: 'elementCaptured', data: message.data });
                 break;
             case 'cancelSelection':
                 stateManager.resetState(true);

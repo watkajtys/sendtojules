@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jules Side Panel</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+
+<div id="mainView" class="view">
+    <div class="container">
+        <div class="task-input-container">
+            <textarea id="taskPrompt" placeholder="Ask Jules to work on a session"></textarea>
+        </div>
+
+        <div id="element-preview-container">
+            <div id="elementCard" class="element-card" style="display: none;">
+                <div class="card-header">
+                    <strong id="elementSummary"></strong>
+                    <div>
+                        <button id="reselectButton" class="card-button">Reselect</button>
+                        <button id="dismissButton" class="card-button">&times;</button>
+                    </div>
+                </div>
+                <div class="card-content">
+                    <details open>
+                        <summary>HTML Preview</summary>
+                        <pre id="htmlPreview"></pre>
+                    </details>
+                    <details>
+                        <summary>DOM Path</summary>
+                        <pre id="domPathPreview"></pre>
+                    </details>
+                    <details id="cssDetails" style="display: none;">
+                        <summary>Computed CSS</summary>
+                        <pre id="cssPreview"></pre>
+                    </details>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-bar">
+            <div class="left-controls">
+                <div class="context-menu-container">
+                    <button id="addContextButton" class="control-button">+</button>
+                    <div id="contextMenu" class="context-menu" style="display: none;">
+                        <div class="context-menu-item" id="selectElementItem">Select an Element</div>
+                        <div class="context-menu-item" id="captureLogsItem">Capture Console Logs</div>
+                        <div class="context-menu-item" id="captureNetworkItem">Capture Network Activity</div>
+                        <div class="context-menu-item" id="captureCssItem">Capture Computed CSS</div>
+                        <div class="context-menu-item" id="viewHistoryItem">View Task History</div>
+                    </div>
+                </div>
+                <div id="context-indicators"></div>
+            </div>
+
+            <div class="center-controls">
+                 <div id="sourceSelectionContainer">
+                    <button id="selectedRepoButton"></button>
+                    <div id="repoLoadingSpinner" class="spinner" style="display: none;"></div>
+                    <div id="branch-selector-wrapper">
+                        <button id="selectedBranchButton"></button>
+                        <div id="branchResults" class="custom-dropdown" style="display: none;">
+                            <div id="branchSearchContainer">
+                                 <input type="text" id="branchSearch" placeholder="Find a branch">
+                            </div>
+                            <div id="branchList"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="repo-input-container" style="display: none;">
+                    <input type="text" id="repoSearch" placeholder="Search for a repository...">
+                    <div id="repoResults" class="custom-dropdown"></div>
+                </div>
+            </div>
+
+            <div class="right-controls">
+                <button id="submitTaskButton" class="control-button">&rarr;</button>
+                <div id="submitSpinner" class="spinner" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="status" class="status-message"></div>
+
+<div id="resultView" class="view" style="display: none;">
+    <div id="resultContent">
+        <h2 id="resultTitle"></h2>
+        <a id="sessionLink" href="#" target="_blank">View Task</a>
+        <button id="dismissResultButton" class="control-button">Dismiss</button>
+    </div>
+</div>
+
+<div id="historyView" class="view" style="display: none;">
+    <div class="history-header">
+        <button id="backButton">&larr; Back</button>
+        <h4>Task History</h4>
+    </div>
+    <div id="historyList"></div>
+    <div id="historyLoadingSpinner" class="spinner" style="display: none;"></div>
+</div>
+
+<script src="sidepanel.js"></script>
+
+</body>
+</html>
