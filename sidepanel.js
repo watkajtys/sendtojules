@@ -21,15 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         inputs: {
             repoSearch: document.getElementById('repoSearch'),
-            repoDropdownSearch: document.getElementById('repoDropdownSearch'),
             selectedRepo: document.getElementById('selectedRepo'),
             taskPrompt: document.getElementById('taskPrompt'),
             branchSearch: document.getElementById('branchSearch'),
         },
         repoInputWrapper: document.getElementById('repo-input-wrapper'),
         sourceSelectionContainer: document.getElementById('sourceSelectionContainer'),
-        repoResults: document.getElementById('repoResults'),
-        repoList: document.getElementById('repoList'),
         branchResults: document.getElementById('branchResults'),
         branchList: document.getElementById('branchList'),
         toggles: {
@@ -122,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Repo Search Logic ---
     function populateRepoResults(filteredSources) {
-        ui.repoList.innerHTML = '';
+        ui.repoResults.innerHTML = '';
         highlightedRepoIndex = -1;
         let currentIndex = 0;
 
@@ -132,13 +129,6 @@ document.addEventListener('DOMContentLoaded', () => {
             item.textContent = source.name;
             item.dataset.id = source.id;
             item.dataset.index = currentIndex++;
-            if (source.id === ui.inputs.selectedRepo.value) {
-                item.classList.add('selected');
-                const check = document.createElement('img');
-                check.src = 'icons/check.svg';
-                check.className = 'check-icon';
-                item.appendChild(check);
-            }
             item.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 selectRepoItem(item);
@@ -155,22 +145,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const recentIds = new Set(recentRepos.map(r => r.id));
         const nonRecentSources = filteredSources.filter(s => !recentIds.has(s.id));
-        const query = ui.inputs.repoDropdownSearch.value.toLowerCase();
+        const query = ui.inputs.repoSearch.value.toLowerCase();
 
         if (query === '' && recentRepos.length > 0) {
-            ui.repoList.appendChild(createHeader('Recently Used'));
-            recentRepos.forEach(repo => ui.repoList.appendChild(createItem(repo)));
+            ui.repoResults.appendChild(createHeader('Recently Used'));
+            recentRepos.forEach(repo => ui.repoResults.appendChild(createItem(repo)));
             if (nonRecentSources.length > 0) {
-                 ui.repoList.appendChild(createHeader('All Repositories'));
+                 ui.repoResults.appendChild(createHeader('All Repositories'));
             }
         }
 
         if (nonRecentSources.length > 0) {
-            nonRecentSources.forEach(source => ui.repoList.appendChild(createItem(source)));
+            nonRecentSources.forEach(source => ui.repoResults.appendChild(createItem(source)));
         }
 
-        if (ui.repoList.children.length === 0) {
-            ui.repoList.innerHTML = '<div class="_jules_no-match">No matches found.</div>';
+        if (ui.repoResults.children.length === 0) {
+            ui.repoResults.innerHTML = '<div class="_jules_no-match">No matches</div>';
         }
     }
 
@@ -272,12 +262,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.buttons.selectedBranch.textContent = selectedBranch;
         ui.branchResults.style.display = 'none';
         ui.inputs.taskPrompt.focus();
-
-        // Re-populate to update the checkmark
-        const repoId = ui.inputs.selectedRepo.value;
-        const repoData = allSources.find(s => s.id === repoId);
-        const defaultBranch = repoData?.githubRepo?.defaultBranch?.displayName;
-        populateBranchResults(selectedRepoBranches, defaultBranch);
     }
 
     function highlightBranchItem(index) {
@@ -458,40 +442,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.inputs.repoSearch.addEventListener('input', () => {
             const query = ui.inputs.repoSearch.value.toLowerCase();
-            ui.inputs.repoDropdownSearch.value = query; // Sync inputs
             const filtered = allSources.filter(s => s.name.toLowerCase().includes(query));
             populateRepoResults(filtered);
             ui.repoResults.style.display = 'block';
             updateClearButtonVisibility();
         });
 
-        ui.inputs.repoDropdownSearch.addEventListener('input', () => {
-            const query = ui.inputs.repoDropdownSearch.value.toLowerCase();
-            ui.inputs.repoSearch.value = query; // Sync inputs
-            const filtered = allSources.filter(s => s.name.toLowerCase().includes(query));
-            populateRepoResults(filtered);
-        });
-
         ui.inputs.repoSearch.addEventListener('focus', () => {
             if (ui.inputs.repoSearch.value === '') {
                 populateRepoResults(allSources);
             }
-             ui.inputs.repoDropdownSearch.value = ui.inputs.repoSearch.value;
             ui.repoResults.style.display = 'block';
-            ui.inputs.repoDropdownSearch.focus();
         });
 
-        document.addEventListener('click', (e) => {
-            if (!ui.repoInputWrapper.contains(e.target)) {
-                ui.repoResults.style.display = 'none';
-            }
-            if (!ui.buttons.selectedBranch.contains(e.target) && !ui.branchResults.contains(e.target)) {
-                ui.branchResults.style.display = 'none';
-            }
+        ui.inputs.repoSearch.addEventListener('blur', () => {
+            setTimeout(() => { ui.repoResults.style.display = 'none'; }, 200);
         });
 
         ui.inputs.repoSearch.addEventListener('keydown', (e) => {
-            const items = ui.repoList.querySelectorAll('._jules_repo-item');
+            const items = ui.repoResults.querySelectorAll('._jules_repo-item');
             if (items.length === 0) return;
             let newIndex = highlightedRepoIndex;
 
