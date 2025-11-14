@@ -95,15 +95,22 @@
             cursor  : not-allowed;
         }
 
-        textarea, #repoSearch {
+        .input-group {
+            margin-top: 10px;
+        }
+
+        textarea, #repoSearch, #sourceSelectionContainer {
             width            : 100%;
             box-sizing       : border-box;
-            margin-top       : 5px;
             background-color : var(--bg-secondary);
             color            : var(--text-primary);
             border           : 1px solid var(--border-primary);
             border-radius    : 6px;
             font-family      : "Google Sans Code", monospace;
+        }
+
+        textarea {
+             margin-bottom: 10px;
         }
 
         textarea {
@@ -288,18 +295,21 @@
             background-color: var(--bg-secondary);
         }
 
+        #branch-selector-wrapper {
+            position: relative;
+        }
+
         #branchResults {
             position: absolute;
-            top: 105%;
-            left: 0;
-            right: 0;
+            top: 105%; /* Position it just below the button */
+            right: 0; /* Align to the right of the wrapper */
+            width: 250px; /* Give it a fixed width */
             background-color: var(--bg-dropdown);
             border: 1px solid var(--border-primary);
             border-radius: 6px;
             max-height: 150px;
             overflow-y: auto;
             z-index: 20;
-            margin-top: 2px;
         }
 
         #branchSearchContainer {
@@ -596,7 +606,7 @@
             border-radius: 6px;
             padding: 12px;
             margin-top: 15px;
-            border: 1px solid var(--border-primary);
+            border: none;
         }
 
         #element-preview-card h4 {
@@ -625,7 +635,7 @@
         #main-action-buttons {
             display: flex;
             gap: 10px;
-            margin-top: 15px;
+            margin-top: 20px;
         }
 
         #main-action-buttons button {
@@ -648,7 +658,7 @@
         #context-toggles {
             margin-top: 20px;
             border-top: 1px solid var(--border-primary);
-            padding-top: 5px;
+            padding-top: 10px;
         }
 
         /* --- Box Model Visualizer Styles --- */
@@ -689,24 +699,23 @@
 
 <div id="taskView" style="display: block;">
     <!-- 1. Description is now the top-most element -->
-    <label for="taskPrompt">Description</label>
-    <textarea id="taskPrompt" placeholder="Describe the task for Jules..."></textarea>
+    <textarea id="taskPrompt" placeholder="Help me fix this error..."></textarea>
 
     <!-- 2. Repo/Branch Selection -->
-    <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
-    <div id="repo-input-wrapper">
-        <div class="repo-search-container">
-            <input type="text" id="repoSearch" placeholder="Loading repositories...">
-            <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
+    <div class="input-group">
+        <div id="repo-input-wrapper">
+            <div class="repo-search-container">
+                <input type="text" id="repoSearch" placeholder="Search for a repository...">
+                <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
+            </div>
+            <div id="repoResults"></div>
         </div>
-        <div id="repoResults"></div>
-    </div>
-    <div id="sourceSelectionContainer">
-        <button id="selectedRepoButton"></button>
-        <div id="branch-selector-wrapper">
-             <button id="selectedBranchButton"></button>
-             <div id="branchResults" style="display: none;">
-                <div id="branchSearchContainer">
+        <div id="sourceSelectionContainer">
+            <button id="selectedRepoButton"></button>
+            <div id="branch-selector-wrapper">
+                <button id="selectedBranchButton"></button>
+                <div id="branchResults" style="display: none;">
+                    <div id="branchSearchContainer">
                     <img src="icons/search.svg" id="branchSearchIcon">
                     <input type="text" id="branchSearch" placeholder="Find a branch">
                 </div>
