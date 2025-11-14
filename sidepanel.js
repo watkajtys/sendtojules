@@ -2,10 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- UI Element Cache ---
     const ui = {
         views: {
-            select: document.getElementById('selectView'),
             task: document.getElementById('taskView'),
             result: document.getElementById('resultView'),
-            dismiss: document.getElementById('dismissView'),
             history: document.getElementById('historyView'),
         },
         buttons: {
@@ -73,7 +71,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- View Management ---
     function switchView(viewName) {
-        Object.values(ui.views).forEach(view => view.style.display = 'none');
+        Object.values(ui.views).forEach(view => {
+            if (view) view.style.display = 'none';
+        });
         const viewToShow = ui.views[viewName];
         if (viewToShow) {
             viewToShow.style.display = viewName === 'result' ? 'flex' : 'block';
@@ -585,7 +585,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.toggles.captureNetwork.checked = isCapturingNetwork;
             ui.explanations.network.style.display = isCapturingNetwork ? 'block' : 'none';
 
-            const viewToDisplay = response.view || 'select';
+            const viewToDisplay = response.view || 'task';
+            if (viewToDisplay === 'select') {
+                viewToDisplay = 'task';
+            }
 
             if (response.state === 'elementCaptured' && response.capturedHtml) {
                 ui.previews.code.querySelector('code').textContent = response.capturedHtml;
