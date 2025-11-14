@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         buttons: {
             select: document.getElementById('selectElement'),
-            createTaskWithoutSelection: document.getElementById('createTaskWithoutSelection'),
             viewHistory: document.getElementById('viewHistory'),
             back: document.getElementById('backButton'),
             submit: document.getElementById('submitTask'),
@@ -80,9 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
             viewToShow.style.display = viewName === 'result' ? 'flex' : 'block';
         }
 
-        if (viewName === 'result') {
-            ui.views.dismiss.style.display = 'flex';
-        }
         chrome.runtime.sendMessage({ action: 'setViewState', view: viewName });
     }
 
@@ -256,13 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.buttons.select.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "startSelection" });
-            window.close();
-        });
-
-        ui.buttons.createTaskWithoutSelection.addEventListener('click', () => {
-            ui.containers.cssCapture.style.display = 'none';
-            ui.previews.code.querySelector('code').textContent = 'No element selected.';
-            switchView('task');
         });
 
         ui.buttons.viewHistory.addEventListener('click', () => {
@@ -273,12 +262,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         ui.buttons.back.addEventListener('click', () => {
-            switchView('select');
+            switchView('task');
         });
 
         ui.buttons.reselect.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "startSelection" });
-            window.close();
         });
 
         ui.buttons.submit.addEventListener('click', () => {
@@ -300,21 +288,9 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.runtime.sendMessage({ action: "submitTask", task, repositoryId, branch });
         });
 
-        ui.buttons.startOver.addEventListener('click', () => {
-            chrome.runtime.sendMessage({ action: "cancelSelection" });
-            switchView('select');
-            setStatus('');
-        });
-
         ui.buttons.cancelTask.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "cancelSelection" });
-            switchView('select');
-            setStatus('');
-        });
-
-        ui.buttons.dismissTask.addEventListener('click', () => {
-            chrome.runtime.sendMessage({ action: "cancelSelection" });
-            switchView('select');
+            switchView('task');
             setStatus('');
         });
 
@@ -420,10 +396,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             highlightRepoItem(newIndex);
-        });
-
-        window.addEventListener('unload', () => {
-            chrome.runtime.sendMessage({ action: "popupClosed" });
         });
 
         ui.toggles.captureLogs.addEventListener('change', (e) => {
@@ -585,14 +557,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupMessageListeners();
 
-        chrome.runtime.sendMessage({ action: "popupOpened" }, (response) => {
+        chrome.runtime.sendMessage({ action: "sidePanelOpened" }, (response) => {
             if (response && response.taskPromptText) {
                 ui.inputs.taskPrompt.value = response.taskPromptText;
             }
         });
 
         toggleSpinner('repo', true);
-        chrome.runtime.sendMessage({ action: "getPopupData" }, (response) => {
+        chrome.runtime.sendMessage({ action: "getSidePanelData" }, (response) => {
             if (chrome.runtime.lastError) {
                 setStatus("Error communicating with background.", true);
                 toggleSpinner('repo', false);
