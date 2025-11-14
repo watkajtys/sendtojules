@@ -206,12 +206,13 @@
     }
 
     chrome.runtime.onMessage.addListener((message) => {
-        if (message.action === "startSelection") { // Changed from startJulesSelection
-            init();
-        } else if (message.action === "cleanupSelector") {
+        if (message.action === "cleanupSelector") {
             cleanup();
         }
     });
+
+    // --- Auto-initialize ---
+    init();
 
     window.addEventListener('beforeunload', cleanup);
 })();

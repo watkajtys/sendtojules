@@ -269,9 +269,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 chrome.runtime.sendMessage({ action: "startSelection", tabId: tab.id });
-
-                await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
-
             } catch (err) {
                 console.error("Error starting selection:", err);
                 if (err.message.includes('Cannot access contents of the page')) {
@@ -313,9 +310,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 chrome.runtime.sendMessage({ action: "startSelection", tabId: tab.id });
-
-                await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
-
             } catch (err) {
                 console.error("Error starting re-selection:", err);
                 setStatus('Failed to re-start selection.', true);
