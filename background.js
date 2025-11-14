@@ -45,21 +45,15 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
         });
     }
 
-    async function handleStartSelection() {
+    async function handleStartSelection(message) {
+        const { tabId } = message;
         await stateManager.resetState(true);
-
-        try {
+        if (tabId) {
+            await stateManager.setCapturedTabId(tabId);
+        } else {
+            // Fallback for safety, though should not happen with the new flow
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) return;
-
-            await stateManager.setCapturedTabId(tab.id);
-
-            await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["selector.css"] });
-            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["selector.js"] });
-            await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
-        } catch (err) {
-            console.error("Failed to inject scripts or send message:", err);
-            chrome.runtime.sendMessage({ action: "julesError", error: "Could not start selection on the active tab." });
+            if (tab) await stateManager.setCapturedTabId(tab.id);
         }
     }
 

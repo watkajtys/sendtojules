@@ -250,8 +250,36 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.runtime.sendMessage({ action: 'saveTaskPrompt', text: e.target.value });
         });
 
-        ui.buttons.select.addEventListener('click', () => {
-            chrome.runtime.sendMessage({ action: "startSelection" });
+        ui.buttons.select.addEventListener('click', async () => {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (!tab) {
+                    setStatus('Could not find active tab.', true);
+                    return;
+                }
+
+                await chrome.scripting.insertCSS({
+                    target: { tabId: tab.id },
+                    files: ["selector.css"]
+                });
+
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ["selector.js"]
+                });
+
+                chrome.runtime.sendMessage({ action: "startSelection", tabId: tab.id });
+
+                await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
+
+            } catch (err) {
+                console.error("Error starting selection:", err);
+                if (err.message.includes('Cannot access contents of the page')) {
+                     setStatus('Cannot access this page. Try a different page.', true);
+                } else {
+                     setStatus('Failed to start selection.', true);
+                }
+            }
         });
 
         ui.buttons.viewHistory.addEventListener('click', () => {
@@ -265,8 +293,33 @@ document.addEventListener('DOMContentLoaded', () => {
             switchView('task');
         });
 
-        ui.buttons.reselect.addEventListener('click', () => {
-            chrome.runtime.sendMessage({ action: "startSelection" });
+        ui.buttons.reselect.addEventListener('click', async () => {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (!tab) {
+                    setStatus('Could not find active tab.', true);
+                    return;
+                }
+
+                // CSS might already be there, but inserting it again is harmless.
+                await chrome.scripting.insertCSS({
+                    target: { tabId: tab.id },
+                    files: ["selector.css"]
+                });
+
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ["selector.js"]
+                });
+
+                chrome.runtime.sendMessage({ action: "startSelection", tabId: tab.id });
+
+                await chrome.tabs.sendMessage(tab.id, { action: "startSelection" });
+
+            } catch (err) {
+                console.error("Error starting re-selection:", err);
+                setStatus('Failed to re-start selection.', true);
+            }
         });
 
         ui.buttons.submit.addEventListener('click', () => {
