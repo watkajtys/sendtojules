@@ -107,6 +107,7 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
                 break;
             case 'elementCaptured':
                 stateManager.setCapturedData(message.data);
+                chrome.runtime.sendMessage({ action: 'elementUpdated', data: message.data });
                 break;
             case 'cancelSelection':
                 stateManager.resetState(true);

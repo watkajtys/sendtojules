@@ -538,6 +538,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     renderHistory(message.history, message.isFromCache);
                     break;
+                case "elementUpdated":
+                    renderCapturedElement(message.data);
+                    break;
             }
         });
     }
@@ -599,6 +602,46 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.historyList.appendChild(fragment);
     }
 
+    function renderCapturedElement(data, isCapturingCSS = false) {
+        if (data && data.outerHTML) {
+            ui.previews.code.querySelector('code').textContent = data.outerHTML;
+            ui.previews.selector.querySelector('code').textContent = data.selector || 'No selector captured.';
+            ui.containers.cssCapture.style.display = 'block';
+
+            ui.toggles.captureCSS.checked = isCapturingCSS;
+
+            const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
+            if (cssPreviewLabel) {
+                cssPreviewLabel.style.display = 'none';
+            }
+            ui.previews.css.style.display = 'none';
+
+            if (isCapturingCSS) {
+                if (cssPreviewLabel) {
+                    cssPreviewLabel.style.display = 'block';
+                }
+                ui.previews.css.style.display = 'block';
+            }
+
+            if (data.computedCss) {
+                let formattedCss = '';
+                for (const [state, properties] of Object.entries(data.computedCss)) {
+                    formattedCss += `/* ${state} */\n`;
+                    for (const [prop, value] of Object.entries(properties)) {
+                        formattedCss += `  ${prop}: ${value};\n`;
+                    }
+                }
+                ui.previews.css.querySelector('code').textContent = formattedCss.trim() || 'No CSS captured.';
+            } else {
+                ui.previews.css.querySelector('code').textContent = 'No CSS captured.';
+            }
+        } else {
+            ui.previews.code.querySelector('code').textContent = 'No element selected.';
+            ui.previews.selector.querySelector('code').textContent = '';
+            ui.containers.cssCapture.style.display = 'none';
+        }
+    }
+
     // --- Initialization ---
     function init() {
         setupEventListeners();
@@ -638,42 +681,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (response.state === 'elementCaptured' && response.capturedHtml) {
-                ui.previews.code.querySelector('code').textContent = response.capturedHtml;
-                ui.previews.selector.querySelector('code').textContent = response.capturedSelector || 'No selector captured.';
-                ui.containers.cssCapture.style.display = 'block';
-
-                const isCapturingCSS = response.isCapturingCSS ?? false;
-                ui.toggles.captureCSS.checked = isCapturingCSS;
-
-                const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
-                if (cssPreviewLabel) {
-                    cssPreviewLabel.style.display = 'none';
-                }
-                ui.previews.css.style.display = 'none';
-
-                if (isCapturingCSS) {
-                    if (cssPreviewLabel) {
-                        cssPreviewLabel.style.display = 'block';
-                    }
-                    ui.previews.css.style.display = 'block';
-                }
-
-                if (response.capturedCss) {
-                    let formattedCss = '';
-                    for (const [state, properties] of Object.entries(response.capturedCss)) {
-                        formattedCss += `/* ${state} */\n`;
-                        for (const [prop, value] of Object.entries(properties)) {
-                            formattedCss += `  ${prop}: ${value};\n`;
-                        }
-                    }
-                    ui.previews.css.querySelector('code').textContent = formattedCss.trim() || 'No CSS captured.';
-                } else {
-                    ui.previews.css.querySelector('code').textContent = 'No CSS captured.';
-                }
-
+                const capturedData = {
+                     outerHTML: response.capturedHtml,
+                     selector: response.capturedSelector,
+                     computedCss: response.capturedCss
+                };
+                renderCapturedElement(capturedData, response.isCapturingCSS);
             } else {
-                ui.previews.code.querySelector('code').textContent = 'No element selected.';
-                ui.containers.cssCapture.style.display = 'none';
+                renderCapturedElement(null); // Clear the view if no element is captured
             }
             switchView(viewToDisplay);
             if (viewToDisplay === 'history') {
