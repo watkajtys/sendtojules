@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultSubtitle: document.getElementById('resultSubtitle'),
         sessionLink: document.getElementById('sessionLink'),
         status: document.getElementById('status'),
+        infoMessage: document.getElementById('info-message'),
     };
 
     // --- State ---
@@ -89,6 +90,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function setStatus(message, isError = false) {
         ui.status.textContent = message;
         ui.status.classList.toggle('error-message', isError);
+    }
+
+    let infoTimeout;
+    function setInfoMessage(message,- autoDismiss = true) {
+        clearTimeout(infoTimeout);
+        if (message) {
+            ui.infoMessage.textContent = message;
+            ui.infoMessage.style.display = 'block';
+            if (autoDismiss) {
+                infoTimeout = setTimeout(() => {
+                    ui.infoMessage.style.display = 'none';
+                }, 5000); // Hide after 5 seconds
+            }
+        } else {
+            ui.infoMessage.style.display = 'none';
+        }
     }
 
     function toggleSpinner(spinnerName, show) {
@@ -412,12 +429,22 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.toggles.captureLogs.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
             ui.explanations.log.style.display = isEnabled ? 'block' : 'none';
+            if (isEnabled) {
+                setInfoMessage("Debugger attaching. A banner will appear in Chrome. This is expected.");
+            } else {
+                setInfoMessage("Debugger detaching. This may take a moment.");
+            }
             chrome.runtime.sendMessage({ action: "toggleLogCapture", enabled: isEnabled });
         });
 
         ui.toggles.captureNetwork.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
             ui.explanations.network.style.display = isEnabled ? 'block' : 'none';
+            if (isEnabled) {
+                setInfoMessage("Debugger attaching. A banner will appear in Chrome. This is expected.");
+            } else {
+                setInfoMessage("Debugger detaching. This may take a moment.");
+            }
             chrome.runtime.sendMessage({ action: "toggleNetworkCapture", enabled: isEnabled });
         });
 
