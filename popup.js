@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let infoTimeout;
-    function setInfoMessage(message,- autoDismiss = true) {
+    function setInfoMessage(message, autoDismiss = true) {
         clearTimeout(infoTimeout);
         if (message) {
             ui.infoMessage.textContent = message;
