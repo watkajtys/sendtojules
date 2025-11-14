@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (defaultBranch) {
                 selectedBranch = defaultBranch;
                 ui.buttons.selectedBranch.textContent = defaultBranch;
-                populateBranchResults(selectedRepoBranches);
+                populateBranchResults(selectedRepoBranches, defaultBranch);
             }
         }
 
@@ -203,12 +203,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Branch Selection Logic ---
 
-    function populateBranchResults(branches) {
+    function populateBranchResults(branches, defaultBranch) {
         ui.branchList.innerHTML = '';
         highlightedBranchIndex = -1;
         let currentIndex = 0;
 
-        branches.forEach(branch => {
+        const createItem = (branch) => {
             const item = document.createElement('div');
             item.className = '_jules_branch-item';
             item.textContent = branch.displayName;
@@ -224,7 +224,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.preventDefault();
                 selectBranchItem(item);
             });
-            ui.branchList.appendChild(item);
+            return item;
+        };
+
+        const createHeader = (title) => {
+            const header = document.createElement('div');
+            header.className = '_jules_repo-header';
+            header.textContent = title;
+            return header;
+        };
+
+        const query = ui.inputs.branchSearch.value.toLowerCase();
+
+        if (query === '' && defaultBranch) {
+            const defaultBranchObj = selectedRepoBranches.find(b => b.displayName === defaultBranch);
+            if (defaultBranchObj) {
+                ui.branchList.appendChild(createHeader('Default Branch'));
+                ui.branchList.appendChild(createItem(defaultBranchObj));
+
+                const otherBranches = branches.filter(b => b.displayName !== defaultBranch);
+                if (otherBranches.length > 0) {
+                    ui.branchList.appendChild(createHeader('All Branches'));
+                    otherBranches.forEach(branch => ui.branchList.appendChild(createItem(branch)));
+                }
+                return; // Exit here since we've handled everything
+            }
+        }
+
+        // Default case for searching or if no default branch found
+        branches.forEach(branch => {
+            ui.branchList.appendChild(createItem(branch));
         });
     }
 
@@ -365,8 +394,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.buttons.selectedBranch.addEventListener('click', () => {
             ui.branchResults.style.display = ui.branchResults.style.display === 'block' ? 'none' : 'block';
             if (ui.branchResults.style.display === 'block') {
+                const repoId = ui.inputs.selectedRepo.value;
+                const repoData = allSources.find(s => s.id === repoId);
+                const defaultBranch = repoData?.githubRepo?.defaultBranch?.displayName;
+
                 ui.inputs.branchSearch.value = '';
-                populateBranchResults(selectedRepoBranches);
+                populateBranchResults(selectedRepoBranches, defaultBranch);
                 ui.inputs.branchSearch.focus();
             }
         });
@@ -380,7 +413,10 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.inputs.branchSearch.addEventListener('input', () => {
             const query = ui.inputs.branchSearch.value.toLowerCase();
             const filtered = selectedRepoBranches.filter(b => b.displayName.toLowerCase().includes(query));
-            populateBranchResults(filtered);
+            const repoId = ui.inputs.selectedRepo.value;
+            const repoData = allSources.find(s => s.id === repoId);
+            const defaultBranch = repoData?.githubRepo?.defaultBranch?.displayName;
+            populateBranchResults(filtered, defaultBranch);
         });
 
         ui.inputs.branchSearch.addEventListener('keydown', (e) => {

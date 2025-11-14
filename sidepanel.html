@@ -109,13 +109,14 @@
             font-family      : "Google Sans Code", monospace;
         }
 
-        textarea {
-             margin-bottom: 10px;
+        textarea, #repoSearch {
+            padding: 10px;
         }
 
         textarea {
-            height : 80px;
-            resize : vertical;
+             margin-bottom: 5px;
+             height: 100px;
+             resize: vertical;
         }
 
         #repoSearch {
@@ -261,7 +262,8 @@
             border-radius: 6px;
             height: 38px;
             padding: 0 4px;
-            overflow: hidden; /* Prevent content from spilling */
+            overflow: visible; /* Allow dropdown to show */
+            position: relative; /* For dropdown positioning */
         }
 
         #selectedRepoButton, #selectedBranchButton {
@@ -288,7 +290,6 @@
 
         #selectedBranchButton {
             flex-shrink: 0; /* Prevents shrinking */
-            position: relative; /* For the dropdown */
         }
 
         #selectedRepoButton:hover, #selectedBranchButton:hover {
@@ -296,20 +297,22 @@
         }
 
         #branch-selector-wrapper {
-            position: relative;
+            position: static; /* Let dropdown be relative to parent container */
         }
 
         #branchResults {
             position: absolute;
-            top: 105%; /* Position it just below the button */
-            right: 0; /* Align to the right of the wrapper */
-            width: 250px; /* Give it a fixed width */
+            top: 100%; /* Position it just below the container */
+            left: 0; /* Align to the left */
+            right: 0; /* Span the full width */
+            width: auto; /* Override fixed width */
             background-color: var(--bg-dropdown);
             border: 1px solid var(--border-primary);
             border-radius: 6px;
             max-height: 150px;
             overflow-y: auto;
             z-index: 20;
+            margin-top: 2px; /* Small gap */
         }
 
         #branchSearchContainer {
