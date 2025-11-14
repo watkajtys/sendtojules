@@ -645,74 +645,28 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.historyList.appendChild(fragment);
     }
 
-    function formatAndHighlightHTML(html) {
+    function formatHTML(html) {
         if (!html) return '';
 
-        // 1. Indentation
         let indentedHtml = '';
         let indentLevel = 0;
-        const tab = '  '; // Two spaces for indentation
+        const tab = '  ';
 
-        // Split by tags, keeping the tags in the result
         html.split(/(<[^>]*>)/).forEach(part => {
             if (!part || part.trim() === '') return;
 
-            // Closing tag: un-indent before adding
             if (part.startsWith('</')) {
                 indentLevel = Math.max(0, indentLevel - 1);
             }
 
             indentedHtml += `${tab.repeat(indentLevel)}${part}\n`;
 
-            // Opening tag (but not self-closing): indent after adding
             if (part.startsWith('<') && !part.startsWith('</') && !part.endsWith('/>')) {
                 indentLevel++;
             }
         });
 
-        // 2. Highlighting (on the now-indented HTML)
-        return highlightHTML(indentedHtml.trim());
-    }
-
-    function highlightHTML(html) {
-        if (!html) return '';
-        // Escape HTML to prevent it from being rendered
-        let escaped = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        // Define regex patterns
-        const patterns = {
-            tags: /&lt;(\/?[\w\d-]+)/g,
-            attributes: /([\w\d-]+)=/g,
-            stringValues: /="([^"]*)"|='([^']*)'/g,
-            gtSymbol: /(&gt;)/g
-        };
-
-        // Apply highlighting
-        return escaped
-            .replace(patterns.tags, '&lt;<span class="hl-tag">$1</span>')
-            .replace(patterns.attributes, '<span class="hl-attr">$1</span>=')
-            .replace(patterns.stringValues, (match, double, single) => {
-                if (double !== undefined) return `="<span class="hl-val">${double}</span>"`;
-                if (single !== undefined) return `='<span class="hl-val">${single}</span>'`;
-                return match; // Should not happen with this regex
-            })
-            .replace(patterns.gtSymbol, '<span class="hl-tag">$1</span>');
-    }
-
-    function highlightCSS(css) {
-        if (!css) return '';
-        let escaped = css.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        const patterns = {
-            comments: /(\/\*[\s\S]*?\*\/)/g,
-            properties: /^(\s*)([\w-]+):/gm,
-            values: /: (.*?);/g
-        };
-
-        return escaped
-            .replace(patterns.comments, '<span class="hl-comment">$1</span>')
-            .replace(patterns.properties, '$1<span class="hl-prop">$2</span>:')
-            .replace(patterns.values, ': <span class="hl-css-val">$1</span>;');
+        return indentedHtml.trim();
     }
 
     function renderBoxModel(dimensions) {
@@ -761,7 +715,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = ui.containers.elementPreviewCard;
         if (data && data.outerHTML) {
             card.style.display = 'block';
-            ui.previews.code.querySelector('code').innerHTML = formatAndHighlightHTML(data.outerHTML);
+
+            const codeBlock = ui.previews.code.querySelector('code');
+            codeBlock.textContent = formatHTML(data.outerHTML);
+            hljs.highlightElement(codeBlock);
+
+
             ui.previews.selector.querySelector('code').textContent = data.selector || 'N/A';
             ui.toggles.captureCSS.checked = isCapturingCSS;
 
@@ -786,7 +745,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         formattedCss += `  ${prop}: ${value};\n`;
                     }
                 }
-            ui.previews.css.querySelector('code').innerHTML = highlightCSS(formattedCss.trim() || 'No CSS captured.');
+                const cssCodeBlock = ui.previews.css.querySelector('code');
+                cssCodeBlock.textContent = formattedCss.trim() || 'No CSS captured.';
+                hljs.highlightElement(cssCodeBlock);
             }
 
             if (showBoxModel) {
@@ -808,6 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function init() {
         setupEventListeners();
         setupMessageListeners();
+        hljs.highlightAll();
 
         chrome.runtime.sendMessage({ action: "sidePanelOpened" }, (response) => {
             if (response && response.taskPromptText) {
