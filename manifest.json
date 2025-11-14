@@ -38,8 +38,14 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["selector.css"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "selector.css",
+        "vendor/highlight.min.js",
+        "vendor/atom-one-dark.min.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {
