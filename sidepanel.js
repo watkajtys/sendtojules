@@ -645,29 +645,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.historyList.appendChild(fragment);
     }
 
-    function formatHTML(html) {
-        if (!html) return '';
-
-        let indentedHtml = '';
-        let indentLevel = 0;
-        const tab = '  ';
-
-        html.split(/(<[^>]*>)/).forEach(part => {
-            if (!part || part.trim() === '') return;
-
-            if (part.startsWith('</')) {
-                indentLevel = Math.max(0, indentLevel - 1);
-            }
-
-            indentedHtml += `${tab.repeat(indentLevel)}${part}\n`;
-
-            if (part.startsWith('<') && !part.startsWith('</') && !part.endsWith('/>')) {
-                indentLevel++;
-            }
-        });
-
-        return indentedHtml.trim();
-    }
 
     function renderBoxModel(dimensions) {
         const { width, height, margin, padding, border } = dimensions;
@@ -717,11 +694,14 @@ document.addEventListener('DOMContentLoaded', () => {
             card.style.display = 'block';
 
             const codeBlock = ui.previews.code.querySelector('code');
-            codeBlock.textContent = formatHTML(data.outerHTML);
-            hljs.highlightElement(codeBlock);
+            const highlightedHTML = hljs.highlight(data.outerHTML, {language: 'xml'}).value;
+            codeBlock.innerHTML = highlightedHTML;
 
 
-            ui.previews.selector.querySelector('code').textContent = data.selector || 'N/A';
+            const selectorBlock = ui.previews.selector.querySelector('code');
+            const highlightedSelector = hljs.highlight(data.selector || 'N/A', {language: 'css'}).value;
+            selectorBlock.innerHTML = highlightedSelector;
+
             ui.toggles.captureCSS.checked = isCapturingCSS;
 
             const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
@@ -746,8 +726,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 const cssCodeBlock = ui.previews.css.querySelector('code');
-                cssCodeBlock.textContent = formattedCss.trim() || 'No CSS captured.';
-                hljs.highlightElement(cssCodeBlock);
+                const highlightedCSS = hljs.highlight(formattedCss.trim() || 'No CSS captured.', {language: 'css'}).value;
+                cssCodeBlock.innerHTML = highlightedCSS;
             }
 
             if (showBoxModel) {
@@ -769,7 +749,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function init() {
         setupEventListeners();
         setupMessageListeners();
-        hljs.highlightAll();
 
         chrome.runtime.sendMessage({ action: "sidePanelOpened" }, (response) => {
             if (response && response.taskPromptText) {
