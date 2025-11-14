@@ -13,7 +13,8 @@
   ],
 
   "host_permissions": [
-    "https://jules.googleapis.com/*"
+    "https://jules.googleapis.com/*",
+    "<all_urls>"
   ],
 
   "background": {
