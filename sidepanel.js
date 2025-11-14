@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
             viewHistoryLink: document.getElementById('viewHistoryLink'), // Changed from viewHistory
             back: document.getElementById('backButton'),
             submit: document.getElementById('submitTask'),
-            reselect: document.getElementById('reselect'),
             // cancelTask is removed, dismissTask is used instead
             startOver: document.getElementById('startOver'),
             clearRepo: document.getElementById('clearRepoSelection'),
@@ -319,32 +318,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.buttons.back.addEventListener('click', () => {
             switchView('task');
-        });
-
-        ui.buttons.reselect.addEventListener('click', async () => {
-            try {
-                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                if (!tab) {
-                    setStatus('Could not find active tab.', true);
-                    return;
-                }
-
-                // CSS might already be there, but inserting it again is harmless.
-                await chrome.scripting.insertCSS({
-                    target: { tabId: tab.id },
-                    files: ["selector.css"]
-                });
-
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ["selector.js"]
-                });
-
-                chrome.runtime.sendMessage({ action: "startSelection", tabId: tab.id });
-            } catch (err) {
-                console.error("Error starting re-selection:", err);
-                setStatus('Failed to re-start selection.', true);
-            }
         });
 
         ui.buttons.submit.addEventListener('click', () => {
@@ -690,6 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderCapturedElement(data, isCapturingCSS = false) {
         const card = ui.containers.elementPreviewCard;
         if (data && data.outerHTML) {
+            ui.buttons.select.textContent = 'Reselect';
             card.style.display = 'block';
 
             const codeBlock = ui.previews.code.querySelector('code');
@@ -734,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
+            ui.buttons.select.textContent = 'Select Element';
             // Hide the entire card and clear content
             card.style.display = 'none';
             ui.previews.code.querySelector('code').textContent = '';
