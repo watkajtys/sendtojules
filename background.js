@@ -50,10 +50,6 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
         await stateManager.resetState(true);
         if (tabId) {
             await stateManager.setCapturedTabId(tabId);
-        } else {
-            // Fallback for safety, though should not happen with the new flow
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab) await stateManager.setCapturedTabId(tab.id);
         }
     }
 
@@ -101,7 +97,7 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
                 handleGetSidePanelData(sendResponse);
                 return true;
             case 'startSelection':
-                handleStartSelection();
+                handleStartSelection(message);
                 break;
             case 'elementCaptured':
                 stateManager.setCapturedData(message.data);
