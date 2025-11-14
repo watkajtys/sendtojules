@@ -128,61 +128,28 @@
             opacity : 1;
         }
 
-        #repoResults, #branchResults {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background-color: var(--bg-dropdown);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
-            max-height: 200px;
-            z-index: 20;
-            margin-top: 4px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            box-sizing: border-box;
-            display: none;
-            overflow: hidden;
+        #repoResults {
+            background-color : var(--bg-dropdown);
+            border           : 1px solid var(--border-primary);
+            border-top       : none;
+            border-radius    : 0 0 6px 6px;
+            max-height       : 100px;
+            overflow-y       : auto;
+            display          : none;
+            position         : relative;
+            z-index          : 10;
         }
 
-        .dropdown-search-container {
-            padding: 8px;
-            border-bottom: 1px solid var(--border-primary);
-            position: relative;
-        }
-        .dropdown-search-icon {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 16px;
-            height: 16px;
-            filter: invert(50%);
-            pointer-events: none;
-        }
-        .dropdown-search-input {
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
+        #repoResults div {
+            padding : 8px 10px;
+            cursor  : pointer;
+            color   : var(--text-secondary);
             font-family: "Google Sans Code", monospace;
-            width: 100%;
-            padding: 8px 8px 8px 38px;
-            box-sizing: border-box;
-        }
-         .dropdown-search-input:focus {
-            outline: none;
-        }
-
-        .dropdown-list {
-            max-height: 150px;
-            overflow-y: auto;
         }
 
         #repoResults div:hover, .highlighted {
-            background-color: var(--bg-dropdown-hover);
-            color: var(--text-primary);
-            text-decoration: none;
+            background-color : var(--bg-dropdown-hover);
+            color            : var(--text-primary);
         }
 
         ._jules_repo-header {
@@ -335,56 +302,50 @@
 
         #branchResults {
             position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
+            top: 100%; /* Position it just below the container */
+            left: 0; /* Align to the left */
+            right: 0; /* Span the full width */
+            width: auto; /* Override fixed width */
             background-color: var(--bg-dropdown);
             border: 1px solid var(--border-primary);
             border-radius: 6px;
             max-height: 150px;
             overflow-y: auto;
             z-index: 20;
-            margin-top: 4px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            box-sizing: border-box;
+            margin-top: 2px; /* Small gap */
         }
 
         #branchSearchContainer {
+            display: flex;
+            align-items: center;
             padding: 8px;
             border-bottom: 1px solid var(--border-primary);
             position: sticky;
             top: 0;
             background-color: var(--bg-dropdown);
-            position: relative;
         }
 
         #branchSearchIcon {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
             width: 16px;
             height: 16px;
-            filter: invert(50%);
-            pointer-events: none;
+            margin-right: 8px;
+            filter: invert(75%);
         }
 
         #branchSearch {
-            background-color: var(--bg-secondary);
+            background: none;
+            border: none;
             color: var(--text-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
             font-family: "Google Sans Code", monospace;
             width: 100%;
-            padding: 8px 8px 8px 38px;
-            box-sizing: border-box;
+            padding: 0;
         }
 
         #branchSearch:focus {
             outline: none;
         }
 
-        #branchList div, #repoResults div {
+        #branchList div {
             padding: 8px 10px;
             cursor: pointer;
             color: var(--text-secondary);
@@ -393,21 +354,19 @@
             align-items: center;
         }
 
-        #branchList div:hover, #branchList div.highlighted,
-        #repoResults div:hover, #repoResults div.highlighted {
+        #branchList div:hover, #branchList div.highlighted {
             background-color: var(--bg-dropdown-hover);
             color: var(--text-primary);
-            text-decoration: none;
         }
 
-        #branchList div .check-icon, #repoResults div .check-icon {
+        #branchList div .check-icon {
             display: none;
             width: 16px;
             height: 16px;
             filter: invert(100%);
         }
 
-        #branchList div.selected .check-icon, #repoResults div.selected .check-icon {
+        #branchList div.selected .check-icon {
             display: block;
         }
 
@@ -748,30 +707,24 @@
     <!-- 2. Repo/Branch Selection -->
     <div class="input-group">
         <div id="repo-input-wrapper">
-             <div class="repo-search-container">
+            <div class="repo-search-container">
                 <input type="text" id="repoSearch" placeholder="Search for a repository...">
                 <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
             </div>
-<div id="repoResults">
-                <div class="dropdown-search-container">
-                    <img src="icons/search.svg" class="dropdown-search-icon">
-                    <input type="text" id="repoDropdownSearch" class="dropdown-search-input" placeholder="Find a repository...">
-                </div>
-                <div id="repoList" class="dropdown-list"></div>
-            </div>
+            <div id="repoResults"></div>
         </div>
         <div id="sourceSelectionContainer">
             <button id="selectedRepoButton"></button>
             <div id="branch-selector-wrapper">
                 <button id="selectedBranchButton"></button>
-                <div id="branchResults">
-                    <div class="dropdown-search-container">
-                        <img src="icons/search.svg" class="dropdown-search-icon">
-                        <input type="text" id="branchSearch" class="dropdown-search-input" placeholder="Find a branch">
-                    </div>
-                    <div id="branchList" class="dropdown-list"></div>
+                <div id="branchResults" style="display: none;">
+                    <div id="branchSearchContainer">
+                    <img src="icons/search.svg" id="branchSearchIcon">
+                    <input type="text" id="branchSearch" placeholder="Find a branch">
                 </div>
+                <div id="branchList"></div>
             </div>
+        </div>
     </div>
     <input type="hidden" id="selectedRepo" value="">
 
