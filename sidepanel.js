@@ -69,6 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedRepoBranches = [];
     let selectedBranch = '';
     let highlightedBranchIndex = -1;
+    let isSelecting = false;
+    let capturedElementData = null;
 
     // --- View Management ---
     function switchView(viewName) {
@@ -113,6 +115,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateClearButtonVisibility() {
         ui.buttons.clearRepo.style.display = ui.inputs.selectedRepo.value ? 'inline-block' : 'none';
+    }
+
+    function setSelectionMode(mode) {
+        isSelecting = (mode === 'selecting');
+        const submitButton = ui.buttons.submit;
+
+        switch (mode) {
+            case 'selecting':
+                ui.buttons.select.textContent = 'Selecting...';
+                ui.buttons.select.disabled = true;
+                submitButton.textContent = 'Cancel';
+                submitButton.classList.add('cancel-button'); // For styling
+                break;
+            case 'captured':
+                ui.buttons.select.textContent = 'Reselect';
+                ui.buttons.select.disabled = false;
+                submitButton.textContent = 'Submit to Jules';
+                submitButton.classList.remove('cancel-button');
+                break;
+            case 'idle':
+            default:
+                ui.buttons.select.textContent = 'Select Element';
+                ui.buttons.select.disabled = false;
+                submitButton.textContent = 'Submit to Jules';
+                submitButton.classList.remove('cancel-button');
+                break;
+        }
     }
 
 
@@ -301,10 +330,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         ui.buttons.select.addEventListener('click', async () => {
+            if (isSelecting) return;
+
+            setSelectionMode('selecting');
+            renderCapturedElement(null, ui.toggles.captureCSS.checked, true); // Show empty preview
+
             try {
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (!tab) {
                     setStatus('Could not find active tab.', true);
+                    setSelectionMode('idle'); // Revert
                     return;
                 }
 
@@ -321,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 chrome.runtime.sendMessage({ action: "startSelection", tabId: tab.id });
             } catch (err) {
                 console.error("Error starting selection:", err);
+                setSelectionMode(capturedElementData ? 'captured' : 'idle'); // Revert to correct state
                 if (err.message.includes('Cannot access contents of the page')) {
                      setStatus('Cannot access this page. Try a different page.', true);
                 } else {
@@ -342,6 +378,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         ui.buttons.submit.addEventListener('click', () => {
+            if (isSelecting) {
+                chrome.runtime.sendMessage({ action: "cancelSelection" });
+                setSelectionMode(capturedElementData ? 'captured' : 'idle');
+                if (!capturedElementData) {
+                    renderCapturedElement(null); // Hide preview if nothing was ever captured
+                }
+                return;
+            }
+
             const task = ui.inputs.taskPrompt.value;
             const repositoryId = ui.inputs.selectedRepo.value;
             const branch = selectedBranch;
@@ -354,15 +399,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 setStatus('Please select a source.', true);
                 return;
             }
+
+            const payload = {
+                action: "submitTask",
+                task,
+                repositoryId,
+                branch,
+                capturedData: null
+            };
+
+            if (capturedElementData) {
+                const dataToSend = { ...capturedElementData };
+                if (!ui.toggles.captureCSS.checked) {
+                    delete dataToSend.computedCss;
+                    delete dataToSend.dimensions;
+                }
+                payload.capturedData = dataToSend;
+            }
+
             setStatus('');
             ui.buttons.submit.disabled = true;
             toggleSpinner('submit', true);
-            chrome.runtime.sendMessage({ action: "submitTask", task, repositoryId, branch });
+            chrome.runtime.sendMessage(payload);
         });
 
         ui.buttons.dismissTask.addEventListener('click', () => {
             chrome.runtime.sendMessage({ action: "dismissElement" });
-             renderCapturedElement(null); // This will hide the card and clear previews
+            capturedElementData = null; // Clear the stored data
+            setSelectionMode('idle');
+            renderCapturedElement(null);
         });
 
         ui.buttons.newTask.addEventListener('click', () => {
@@ -504,17 +569,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.toggles.captureCSS.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
-            // Tell the background script to save the user's preference
             chrome.runtime.sendMessage({ action: "toggleCSSCapture", enabled: isEnabled });
-
-            // Immediately update the UI by re-rendering the element preview
-            // The background will send back the state which will trigger this again,
-            // but re-rendering immediately provides a faster user experience.
-            chrome.runtime.sendMessage({ action: "getSidePanelData" }, (response) => {
-                 if (response.state === 'elementCaptured' && response.capturedData) {
-                    renderCapturedElement(response.capturedData, isEnabled);
-                }
-            });
+            // Re-render the captured element preview with the new CSS visibility state.
+            // This uses the locally stored `capturedElementData`.
+            if (capturedElementData) {
+                renderCapturedElement(capturedElementData, isEnabled);
+            }
         });
     }
 
@@ -579,11 +639,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     renderHistory(message.history, message.isFromCache);
                     break;
+                case "elementHovered":
+                    if (isSelecting) {
+                        renderCapturedElement(message.data, ui.toggles.captureCSS.checked, true);
+                    }
+                    break;
+                case "selectionCancelled":
+                    setSelectionMode(capturedElementData ? 'captured' : 'idle');
+                    if (!capturedElementData) {
+                         renderCapturedElement(null);
+                    } else {
+                        renderCapturedElement(capturedElementData, ui.toggles.captureCSS.checked);
+                    }
+                    break;
                 case "elementUpdated":
-                    renderCapturedElement(message.data);
+                    capturedElementData = message.data;
+                    setSelectionMode('captured');
+                    renderCapturedElement(message.data, ui.toggles.captureCSS.checked);
                     break;
                 case "stateReset":
-                    // When the state is reset from the background, we need to re-init the sidepanel
+                    capturedElementData = null;
+                    setSelectionMode('idle');
                     init();
                     break;
             }
@@ -690,23 +766,32 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    function renderCapturedElement(data, isCapturingCSS = false) {
+    function renderCapturedElement(data, isCapturingCSS = false, isPreview = false) {
         const card = ui.containers.elementPreviewCard;
+        const codeBlock = ui.previews.code.querySelector('code');
+        const selectorBlock = ui.previews.selector.querySelector('code');
+        const cssCodeBlock = ui.previews.css.querySelector('code');
+
+        // Special case for starting selection: show an empty, waiting card.
+        if (isPreview && !data) {
+            card.style.display = 'block';
+            codeBlock.textContent = 'Hover over an element to see a preview.';
+            selectorBlock.textContent = '...';
+            return;
+        }
+
         if (data && data.outerHTML) {
-            ui.buttons.select.textContent = 'Reselect';
             card.style.display = 'block';
 
-            const codeBlock = ui.previews.code.querySelector('code');
-            const highlightedHTML = hljs.highlight(data.outerHTML, {language: 'xml'}).value;
-            codeBlock.innerHTML = highlightedHTML;
-
-
-            const selectorBlock = ui.previews.selector.querySelector('code');
-            const highlightedSelector = hljs.highlight(data.selector || 'N/A', {language: 'css'}).value;
-            selectorBlock.innerHTML = highlightedSelector;
+            if (isPreview) {
+                codeBlock.textContent = data.outerHTML;
+                selectorBlock.textContent = data.selector || 'N/A';
+            } else {
+                codeBlock.innerHTML = hljs.highlight(data.outerHTML, { language: 'xml' }).value;
+                selectorBlock.innerHTML = hljs.highlight(data.selector || 'N/A', { language: 'css' }).value;
+            }
 
             ui.toggles.captureCSS.checked = isCapturingCSS;
-
             const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
             const boxModelLabel = document.querySelector('label[for="boxModel"]');
 
@@ -718,7 +803,6 @@ document.addEventListener('DOMContentLoaded', () => {
             boxModelLabel.style.display = showBoxModel ? 'block' : 'none';
             ui.containers.boxModel.style.display = showBoxModel ? 'block' : 'none';
 
-
             if (showCss) {
                 let formattedCss = '';
                 for (const [state, properties] of Object.entries(data.computedCss)) {
@@ -728,9 +812,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         formattedCss += `  ${prop}: ${value};\n`;
                     }
                 }
-                const cssCodeBlock = ui.previews.css.querySelector('code');
-                const highlightedCSS = hljs.highlight(formattedCss.trim() || 'No CSS captured.', {language: 'css'}).value;
-                cssCodeBlock.innerHTML = highlightedCSS;
+                cssCodeBlock.innerHTML = hljs.highlight(formattedCss.trim() || 'No CSS captured.', { language: 'css' }).value;
             }
 
             if (showBoxModel) {
@@ -738,12 +820,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
-            ui.buttons.select.textContent = 'Select Element';
             // Hide the entire card and clear content
             card.style.display = 'none';
-            ui.previews.code.querySelector('code').textContent = '';
-            ui.previews.selector.querySelector('code').textContent = '';
-            ui.previews.css.querySelector('code').textContent = '';
+            codeBlock.textContent = '';
+            selectorBlock.textContent = '';
+            cssCodeBlock.textContent = '';
             ui.containers.boxModel.innerHTML = '';
         }
     }
@@ -787,15 +868,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 viewToDisplay = 'task';
             }
 
-            if (response.state === 'elementCaptured' && response.capturedHtml) {
-                const capturedData = {
-                     outerHTML: response.capturedHtml,
-                     selector: response.capturedSelector,
-                     computedCss: response.capturedCss
-                };
-                renderCapturedElement(capturedData, response.isCapturingCSS);
+            capturedElementData = response.capturedData || null;
+
+            if (capturedElementData) {
+                setSelectionMode('captured');
+                renderCapturedElement(capturedElementData, response.isCapturingCSS);
             } else {
-                renderCapturedElement(null); // Clear the view if no element is captured
+                setSelectionMode('idle');
+                renderCapturedElement(null);
             }
             switchView(viewToDisplay);
             if (viewToDisplay === 'history') {

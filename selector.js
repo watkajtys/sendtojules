@@ -41,19 +41,7 @@
     }
     window.__julesSelectorActive = false; // Set initial state to inactive.
 
-    let tooltip;
-    let breadcrumb;
     let debounceTimer;
-
-    function createUI() {
-        tooltip = document.createElement('div');
-        tooltip.classList.add('_jules_tooltip');
-        document.body.appendChild(tooltip);
-
-        breadcrumb = document.createElement('div');
-        breadcrumb.classList.add('_jules_breadcrumb');
-        document.body.appendChild(breadcrumb);
-    }
 
     function debounce(func, delay) {
         return function(...args) {
@@ -96,34 +84,26 @@
 
     function onMouseOver(event) {
         event.target.classList.add('_jules_highlight');
-        updateUIDebounced(event);
+        sendHoveredElementDataDebounced(event);
     }
 
-    const updateUIDebounced = debounce((event) => {
+    const sendHoveredElementDataDebounced = debounce((event) => {
         const target = event.target;
-        const fullSelector = getSelector(target);
-        if (breadcrumb) breadcrumb.textContent = fullSelector;
-        if (tooltip) {
-            const tag = target.tagName.toLowerCase();
-            const id = target.id ? `#${target.id}` : '';
-            const classAttr = target.getAttribute('class') || '';
-            const classesList = classAttr.split(' ').filter(c => c && !c.startsWith('_jules_'));
-            const classes = classesList.length > 0 ? `.${classesList.join('.')}` : '';
-            const dims = `${target.offsetWidth}px x ${target.offsetHeight}px`;
-            const hint = `Click to capture`;
-
-            tooltip.innerHTML = `
-              <div class="_jules_tooltip_header">
-                <span class="_jules_tooltip_tag">${tag}</span>
-                <span class="_jules_tooltip_id">${id}</span>
-              </div>
-              <div class="_jules_tooltip_classes">${classes}</div>
-              <div class="_jules_tooltip_dims">${dims}</div>
-              <div class="_jules_tooltip_hint">${hint}</div>
-            `;
-            tooltip.style.left = (event.pageX + 15) + 'px';
-            tooltip.style.top = (event.pageY + 15) + 'px';
+        // The element may have been removed from the DOM by the time this is called.
+        if (!target || !document.body.contains(target)) {
+            return;
         }
+        const cleanElement = target.cloneNode(true);
+        cleanElement.classList.remove('_jules_highlight');
+        cleanElement.querySelectorAll('._jules_highlight').forEach(el => el.classList.remove('_jules_highlight'));
+
+        chrome.runtime.sendMessage({
+            action: 'elementHovered',
+            data: {
+                outerHTML: cleanElement.outerHTML,
+                selector: getSelector(target),
+            }
+        });
     }, 100);
 
     function onMouseOut(event) {
@@ -189,16 +169,15 @@
         document.removeEventListener('mouseout', onMouseOut);
         document.removeEventListener('click', onClick, true);
         document.removeEventListener('keydown', onKeyDown, true);
-        if (tooltip) tooltip.remove();
-        if (breadcrumb) breadcrumb.remove();
         document.querySelectorAll('._jules_highlight').forEach(el => el.classList.remove('_jules_highlight'));
         window.__julesSelectorActive = false;
+        // Send a message to tell the side panel to clear its hover state
+        chrome.runtime.sendMessage({ action: "selectionCancelled" });
     }
 
     function init() {
         if (window.__julesSelectorActive) return;
         window.__julesSelectorActive = true;
-        createUI();
         document.addEventListener('mouseover', onMouseOver);
         document.addEventListener('mouseout', onMouseOut);
         document.addEventListener('click', onClick, true);
