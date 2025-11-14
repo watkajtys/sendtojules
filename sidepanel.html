@@ -589,15 +589,110 @@
         #action-buttons button {
             margin-top: 0; /* Override the default margin */
         }
+
+        /* --- New Styles for Cleaner Layout --- */
+        #element-preview-card {
+            background-color: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 15px;
+            border: 1px solid var(--border-primary);
+        }
+
+        #element-preview-card h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        #element-preview-card label {
+            font-size: 0.8em;
+            color: var(--text-secondary);
+        }
+
+        #element-preview-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        #element-preview-actions button {
+            width: 50%;
+            margin-top: 0;
+            font-size: 0.9em;
+        }
+
+        #main-action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        #main-action-buttons button {
+            width: 50%;
+            margin-top: 0; /* Override default button margin */
+        }
+
+
+        #viewHistoryLink {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        #viewHistoryLink:hover {
+            text-decoration: underline;
+        }
+        #context-toggles {
+            margin-top: 20px;
+            border-top: 1px solid var(--border-primary);
+            padding-top: 5px;
+        }
+
+        /* --- Box Model Visualizer Styles --- */
+       #boxModel {
+            margin-top: 10px;
+            font-size: 0.8em;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+        .box-model-margin, .box-model-border, .box-model-padding {
+            position: relative;
+            padding: 20px;
+        }
+        .box-model-margin { background-color: rgba(186, 131, 172, 0.2); border: 1px dashed rgba(186, 131, 172, 0.5); }
+        .box-model-border { background-color: rgba(131, 186, 137, 0.2); border: 1px dashed rgba(131, 186, 137, 0.5); }
+        .box-model-padding { background-color: rgba(131, 166, 186, 0.2); border: 1px dashed rgba(131, 166, 186, 0.5); }
+        .box-model-content {
+            background-color: var(--bg-primary);
+            padding: 15px 10px;
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            font-weight: bold;
+        }
+        .box-model-label {
+            position: absolute;
+            top: 2px;
+            left: 5px;
+            font-size: 0.9em;
+        }
+        .box-model-top { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); }
+        .box-model-bottom { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
+        .box-model-left { position: absolute; left: 2px; top: 50%; transform: translateY(-50%); }
+        .box-model-right { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+
     </style>
 </head>
 <body>
-<h3>Send To Jules</h3>
 
 <div id="taskView" style="display: block;">
-    <button id="selectElement">Select an Element</button>
-    <button id="viewHistory">View Task History</button>
+    <!-- 1. Description is now the top-most element -->
+    <label for="taskPrompt">Description</label>
+    <textarea id="taskPrompt" placeholder="Describe the task for Jules..."></textarea>
 
+    <!-- 2. Repo/Branch Selection -->
     <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
     <div id="repo-input-wrapper">
         <div class="repo-search-container">
@@ -621,59 +716,78 @@
     </div>
     <input type="hidden" id="selectedRepo" value="">
 
-    <label for="taskPrompt">Description</label>
-    <textarea id="taskPrompt" placeholder="Examine this element"></textarea>
+    <!-- 3. Rich Element Preview Card (Initially Hidden) -->
+    <div id="element-preview-card" style="display: none;">
+        <h4>Selected Element</h4>
+        <label>Preview</label>
+        <pre id="codePreview"><code class="language-xml"></code></pre>
 
-    <label>Selected Element (Preview)</label>
-    <pre id="codePreview"><code class="language-xml">No element selected.</code></pre>
+        <label>DOM Path</label>
+        <pre id="selectorPreview"><code class="language-css-selector"></code></pre>
 
-    <label>DOM Path</label>
-    <pre id="selectorPreview"><code class="language-css-selector">No element selected.</code></pre>
+        <div id="cssCaptureContainer">
+            <div class="toggle-container">
+                <label class="switch">
+                    <input type="checkbox" id="captureCSSToggle">
+                    <span class="slider round"></span>
+                </label>
+                <label class="toggle-label" for="captureCSSToggle">Capture Computed CSS & Box Model</label>
+            </div>
+            <!-- This label is now controlled by JS -->
+            <label for="boxModel" style="display: none; margin-top: 15px;">Box Model</label>
+            <div id="boxModel" style="display: none;">
+                <!-- Box model will be rendered here by JS -->
+            </div>
 
-    <div class="toggle-container">
-        <label class="switch">
-            <input type="checkbox" id="captureLogsToggle">
-            <span class="slider round"></span>
-        </label>
-        <label class="toggle-label" for="captureLogsToggle">Capture console logs</label>
-    </div>
-
-    <div id="logExplanation" class="explanation-text" style="display: none;">
-        When enabled, a banner will appear stating this extension is debugging the browser. This is required to capture all console logs for troubleshooting.
-    </div>
-
-    <div class="toggle-container">
-        <label class="switch">
-            <input type="checkbox" id="captureNetworkToggle">
-            <span class="slider round"></span>
-        </label>
-        <label class="toggle-label" for="captureNetworkToggle">Capture network activity</label>
-    </div>
-
-    <div id="networkExplanation" class="explanation-text" style="display: none;">
-        This will capture network requests (XHR, Fetch) and their responses to help diagnose issues with APIs and data loading.
-    </div>
-
-    <div id="cssCaptureContainer" style="display: none;">
-        <div class="toggle-container">
-            <label class="switch">
-                <input type="checkbox" id="captureCSSToggle">
-                <span class="slider round"></span>
-            </label>
-            <label class="toggle-label" for="captureCSSToggle">Capture Computed CSS</label>
+            <!-- This label is now controlled by JS -->
+            <label for="cssPreview" style="display: none; margin-top: 15px;">Captured CSS</label>
+            <pre id="cssPreview" class="code-preview" style="display: none;"><code class="language-css"></code></pre>
         </div>
 
-        <label for="cssPreview">Captured CSS (Preview)</label>
-        <pre id="cssPreview" class="code-preview"><code class="language-css">No CSS captured.</code></pre>
+        <div id="element-preview-actions">
+          <button id="reselect">Reselect</button>
+          <button id="dismissTask">Dismiss</button>
+        </div>
     </div>
 
+
+    <!-- 4. Main Action Buttons -->
+    <div id="main-action-buttons">
+        <button id="selectElement">Select Element</button>
+        <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
+    </div>
+
+
+    <!-- 5. Context Toggles at the bottom -->
+    <div id="context-toggles">
+        <div class="toggle-container">
+            <label class="switch">
+                <input type="checkbox" id="captureLogsToggle">
+                <span class="slider round"></span>
+            </label>
+            <label class="toggle-label" for="captureLogsToggle">Capture console logs</label>
+        </div>
+        <div id="logExplanation" class="explanation-text" style="display: none;">
+            When enabled, a banner will appear stating this extension is debugging the browser. This is required to capture all console logs for troubleshooting.
+        </div>
+
+        <div class="toggle-container">
+            <label class="switch">
+                <input type="checkbox" id="captureNetworkToggle">
+                <span class="slider round"></span>
+            </label>
+            <label class="toggle-label" for="captureNetworkToggle">Capture network activity</label>
+        </div>
+        <div id="networkExplanation" class="explanation-text" style="display: none;">
+            This will capture network requests (XHR, Fetch) and their responses to help diagnose issues with APIs and data loading.
+        </div>
+    </div>
+
+
+    <!-- 6. Misc items (Status messages, History link) -->
     <div id="info-message"></div>
+    <a href="#" id="viewHistoryLink">View Task History</a>
 
-    <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
-    <div id="action-buttons">
-      <button id="reselect">Reselect</button>
-      <button id="cancelTask">New Task</button>
-    </div>
 </div>
 
 <div id="resultView">

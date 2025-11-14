@@ -21,9 +21,7 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
 
             sendResponse({
                 state: viewState,
-                capturedHtml: isElementCaptured ? state.julesCapturedData.outerHTML : null,
-                capturedSelector: isElementCaptured ? state.julesCapturedData.selector : null,
-                capturedCss: isElementCaptured ? state.julesCapturedData.computedCss : null,
+                capturedData: isElementCaptured ? state.julesCapturedData : null,
                 recentRepos: state.mostRecentRepos,
                 isLogging: state.isCapturingLogs,
                 isCapturingNetwork: state.isCapturingNetwork,
@@ -108,6 +106,10 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
             case 'elementCaptured':
                 stateManager.setCapturedData(message.data);
                 chrome.runtime.sendMessage({ action: 'elementUpdated', data: message.data });
+                break;
+            case 'dismissElement':
+                stateManager.setCapturedData(null);
+                // No need to send a message, the UI will re-render and hide the card
                 break;
             case 'cancelSelection':
                 stateManager.resetState(true);

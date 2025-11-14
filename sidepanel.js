@@ -8,11 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         buttons: {
             select: document.getElementById('selectElement'),
-            viewHistory: document.getElementById('viewHistory'),
+            viewHistoryLink: document.getElementById('viewHistoryLink'), // Changed from viewHistory
             back: document.getElementById('backButton'),
             submit: document.getElementById('submitTask'),
             reselect: document.getElementById('reselect'),
-            cancelTask: document.getElementById('cancelTask'),
+            // cancelTask is removed, dismissTask is used instead
             startOver: document.getElementById('startOver'),
             clearRepo: document.getElementById('clearRepoSelection'),
             dismissTask: document.getElementById('dismissTask'),
@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         containers: {
             cssCapture: document.getElementById('cssCaptureContainer'),
+            elementPreviewCard: document.getElementById('element-preview-card'),
+            boxModel: document.getElementById('boxModel'), // New container for box model
         },
         previews: {
             code: document.getElementById('codePreview'),
@@ -279,7 +281,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        ui.buttons.viewHistory.addEventListener('click', () => {
+        ui.buttons.viewHistoryLink.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent the link from navigating
             switchView('history');
             ui.historyList.innerHTML = '';
             toggleSpinner('history', true);
@@ -335,10 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.runtime.sendMessage({ action: "submitTask", task, repositoryId, branch });
         });
 
-        ui.buttons.cancelTask.addEventListener('click', () => {
-            chrome.runtime.sendMessage({ action: "cancelSelection" });
-            switchView('task');
-            setStatus('');
+        ui.buttons.dismissTask.addEventListener('click', () => {
+            chrome.runtime.sendMessage({ action: "dismissElement" });
+             renderCapturedElement(null); // This will hide the card and clear previews
         });
 
         ui.buttons.clearRepo.addEventListener('click', () => {
@@ -469,12 +471,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.toggles.captureCSS.addEventListener('change', (e) => {
             const isEnabled = e.target.checked;
-            const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
-            if (cssPreviewLabel) {
-                cssPreviewLabel.style.display = isEnabled ? 'block' : 'none';
-            }
-            ui.previews.css.style.display = isEnabled ? 'block' : 'none';
+            // Tell the background script to save the user's preference
             chrome.runtime.sendMessage({ action: "toggleCSSCapture", enabled: isEnabled });
+
+            // Immediately update the UI by re-rendering the element preview
+            // The background will send back the state which will trigger this again,
+            // but re-rendering immediately provides a faster user experience.
+            chrome.runtime.sendMessage({ action: "getSidePanelData" }, (response) => {
+                 if (response.state === 'elementCaptured' && response.capturedData) {
+                    renderCapturedElement(response.capturedData, isEnabled);
+                }
+            });
         });
     }
 
@@ -602,45 +609,85 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.historyList.appendChild(fragment);
     }
 
-    function renderCapturedElement(data, isCapturingCSS = false) {
-        if (data && data.outerHTML) {
-            ui.previews.code.querySelector('code').textContent = data.outerHTML;
-            ui.previews.selector.querySelector('code').textContent = data.selector || 'No selector captured.';
-            ui.containers.cssCapture.style.display = 'block';
+    function renderBoxModel(dimensions) {
+        const { width, height, margin, padding, border } = dimensions;
+        // Simple parseFloat and format to 2 decimal places
+        const format = (val) => parseFloat(val).toFixed(2);
 
+        ui.containers.boxModel.innerHTML = `
+            <div class="box-model-margin">
+                <span class="box-model-label">Margin</span>
+                <div class="box-model-top">${format(margin.top)}</div>
+                <div class="box-model-left">${format(margin.left)}</div>
+                <div class="box-model-right">${format(margin.right)}</div>
+                <div class="box-model-bottom">${format(margin.bottom)}</div>
+                <div class="box-model-border">
+                    <span class="box-model-label">Border</span>
+                    <div class="box-model-top">${format(border.top)}</div>
+                    <div class="box-model-left">${format(border.left)}</div>
+                    <div class="box-model-right">${format(border.right)}</div>
+                    <div class="box-model-bottom">${format(border.bottom)}</div>
+                    <div class="box-model-padding">
+                        <span class="box-model-label">Padding</span>
+                        <div class="box-model-top">${format(padding.top)}</div>
+                        <div class="box-model-left">${format(padding.left)}</div>
+                        <div class="box-model-right">${format(padding.right)}</div>
+                        <div class="box-model-bottom">${format(padding.bottom)}</div>
+                        <div class="box-model-content">
+                            ${format(width)} x ${format(height)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderCapturedElement(data, isCapturingCSS = false) {
+        const card = ui.containers.elementPreviewCard;
+        if (data && data.outerHTML) {
+            card.style.display = 'block';
+            ui.previews.code.querySelector('code').textContent = data.outerHTML;
+            ui.previews.selector.querySelector('code').textContent = data.selector || 'N/A';
             ui.toggles.captureCSS.checked = isCapturingCSS;
 
             const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');
-            if (cssPreviewLabel) {
-                cssPreviewLabel.style.display = 'none';
-            }
-            ui.previews.css.style.display = 'none';
+            const boxModelLabel = document.querySelector('label[for="boxModel"]');
 
-            if (isCapturingCSS) {
-                if (cssPreviewLabel) {
-                    cssPreviewLabel.style.display = 'block';
-                }
-                ui.previews.css.style.display = 'block';
-            }
+            const showCss = isCapturingCSS && data.computedCss;
+            cssPreviewLabel.style.display = showCss ? 'block' : 'none';
+            ui.previews.css.style.display = showCss ? 'block' : 'none';
 
-            if (data.computedCss) {
+            const showBoxModel = isCapturingCSS && data.dimensions;
+            boxModelLabel.style.display = showBoxModel ? 'block' : 'none';
+            ui.containers.boxModel.style.display = showBoxModel ? 'block' : 'none';
+
+
+            if (showCss) {
                 let formattedCss = '';
                 for (const [state, properties] of Object.entries(data.computedCss)) {
+                    if (Object.keys(properties).length === 0) continue;
                     formattedCss += `/* ${state} */\n`;
                     for (const [prop, value] of Object.entries(properties)) {
                         formattedCss += `  ${prop}: ${value};\n`;
                     }
                 }
                 ui.previews.css.querySelector('code').textContent = formattedCss.trim() || 'No CSS captured.';
-            } else {
-                ui.previews.css.querySelector('code').textContent = 'No CSS captured.';
             }
+
+            if (showBoxModel) {
+                renderBoxModel(data.dimensions);
+            }
+
         } else {
-            ui.previews.code.querySelector('code').textContent = 'No element selected.';
+            // Hide the entire card and clear content
+            card.style.display = 'none';
+            ui.previews.code.querySelector('code').textContent = '';
             ui.previews.selector.querySelector('code').textContent = '';
-            ui.containers.cssCapture.style.display = 'none';
+            ui.previews.css.querySelector('code').textContent = '';
+            ui.containers.boxModel.innerHTML = '';
         }
     }
+
 
     // --- Initialization ---
     function init() {
