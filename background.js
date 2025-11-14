@@ -147,6 +147,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     await fetchHistory(result.julesApiKey, stateManager);
                 }
                 break;
+            case 'resetStateAndGoToTaskView':
+                await stateManager.resetState(true);
+                await stateManager.setViewState('task');
+                // We also need to inform the sidepanel to re-render its state
+                chrome.runtime.sendMessage({ action: 'stateReset' });
+                break;
             default:
                 // No default case needed, just ignore unknown messages.
                 break;

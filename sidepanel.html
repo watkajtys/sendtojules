@@ -396,6 +396,28 @@
             display : none;
         }
 
+        #resultView .button-group {
+            display: flex;
+            gap: 10px; /* Space between buttons */
+            margin-top: 15px; /* Space above the button group */
+            width: 100%;
+        }
+
+        #resultView .button-group a, #resultView .button-group button {
+            flex-grow: 1; /* Make both buttons take equal space */
+            text-align: center;
+            margin: 0;
+            padding: 8px 12px;
+            font-size: 0.9em;
+            text-decoration: none;
+        }
+
+        #newTaskButton {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+        }
+
+
         #dismissView {
             display: none;
             justify-content: flex-end;
@@ -819,8 +841,11 @@
     <div id="resultView-text">
         <p id="resultTitle">Task created!</p>
         <p id="resultSubtitle">Background task in progress</p>
+        <div class="button-group">
+            <a id="sessionLink" href="#" target="_blank">View task</a>
+            <button id="newTaskButton">New Task</button>
+        </div>
     </div>
-    <a id="sessionLink" href="#" target="_blank">View task</a>
 </div>
 
 <div id="status"></div>
