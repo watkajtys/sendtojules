@@ -481,6 +481,18 @@
             border-left: 2px solid var(--border-primary);
         }
 
+        #info-message {
+            display: none; /* Hidden by default */
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
         /* History View Styles */
         .history-header {
             display: flex;
@@ -648,6 +660,8 @@
         <label for="cssPreview">Captured CSS (Preview)</label>
         <pre id="cssPreview" class="code-preview"><code class="language-css">No CSS captured.</code></pre>
     </div>
+
+    <div id="info-message"></div>
 
     <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
     <button id="reselect">Reselect</button>
