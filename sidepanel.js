@@ -585,7 +585,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.toggles.captureNetwork.checked = isCapturingNetwork;
             ui.explanations.network.style.display = isCapturingNetwork ? 'block' : 'none';
 
-            const viewToDisplay = response.view || 'task';
+            let viewToDisplay = response.view || 'task';
+
             if (viewToDisplay === 'select') {
                 viewToDisplay = 'task';
             }
