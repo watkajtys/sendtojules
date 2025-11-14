@@ -206,13 +206,14 @@
     }
 
     chrome.runtime.onMessage.addListener((message) => {
-        if (message.action === "cleanupSelector") {
+        if (message.action === "activateSelector") {
+            init();
+        } else if (message.action === "cleanupSelector") {
             cleanup();
         }
     });
 
-    // --- Auto-initialize ---
-    init();
+    // No longer auto-initializing. Waiting for message from background script.
 
     window.addEventListener('beforeunload', cleanup);
 })();

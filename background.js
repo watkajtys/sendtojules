@@ -50,6 +50,12 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
         await stateManager.resetState(true);
         if (tabId) {
             await stateManager.setCapturedTabId(tabId);
+            try {
+                await chrome.tabs.sendMessage(tabId, { action: "activateSelector" });
+            } catch (error) {
+                console.error("Could not send activateSelector message:", error);
+                // Consider sending an error back to the sidepanel
+            }
         }
     }
 
