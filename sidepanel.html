@@ -85,7 +85,7 @@
             color            : var(--text-primary);
         }
 
-        #selectElement, #reselect, #createTaskWithoutSelection, #cancelTask, #viewHistory {
+        #selectElement, #createTaskWithoutSelection, #cancelTask, #viewHistory {
             background-color : var(--bg-secondary);
             border           : 1px solid var(--border-primary);
         }
@@ -630,9 +630,12 @@
         }
 
         #element-preview-actions button {
-            width: 50%;
+            width: 100%;
             margin-top: 0;
             font-size: 0.9em;
+            background-color: transparent;
+            border: 1px solid var(--border-primary);
+            color: var(--text-secondary);
         }
 
         #main-action-buttons {
@@ -767,7 +770,6 @@
         </div>
 
         <div id="element-preview-actions">
-          <button id="reselect">Reselect</button>
           <button id="dismissTask">Dismiss</button>
         </div>
     </div>
