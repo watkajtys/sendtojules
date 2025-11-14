@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dismissTask: document.getElementById('dismissTask'),
             selectedRepo: document.getElementById('selectedRepoButton'),
             selectedBranch: document.getElementById('selectedBranchButton'),
+            addRepo: document.getElementById('addRepoButton'),
         },
         inputs: {
             repoSearch: document.getElementById('repoSearch'),
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         repoInputWrapper: document.getElementById('repo-input-wrapper'),
         sourceSelectionContainer: document.getElementById('sourceSelectionContainer'),
+        repoSearchContainer: document.getElementById('repo-search-container'),
         branchResults: document.getElementById('branchResults'),
         branchList: document.getElementById('branchList'),
         toggles: {
@@ -182,8 +184,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 populateBranchResults(selectedRepoBranches);
             }
         }
-
-        ui.repoInputWrapper.style.display = 'none';
+        ui.buttons.addRepo.style.display = 'none';
+        ui.repoSearchContainer.style.display = 'none';
         ui.sourceSelectionContainer.style.display = 'flex';
         ui.repoResults.style.display = 'none';
         updateClearButtonVisibility();
@@ -289,6 +291,13 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.runtime.sendMessage({ action: "fetchHistory" });
         });
 
+        document.getElementById('debuggingLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            const debuggingSection = document.getElementById('debugging-section');
+            const isVisible = debuggingSection.style.display === 'block';
+            debuggingSection.style.display = isVisible ? 'none' : 'block';
+        });
+
         ui.buttons.back.addEventListener('click', () => {
             switchView('task');
         });
@@ -343,16 +352,20 @@ document.addEventListener('DOMContentLoaded', () => {
              renderCapturedElement(null); // This will hide the card and clear previews
         });
 
+        ui.buttons.addRepo.addEventListener('click', () => {
+            ui.repoSearchContainer.style.display = 'block';
+            ui.inputs.repoSearch.focus();
+        });
+
         ui.buttons.clearRepo.addEventListener('click', () => {
             ui.inputs.repoSearch.value = '';
             ui.inputs.selectedRepo.value = '';
             selectedBranch = '';
             selectedRepoBranches = [];
             ui.sourceSelectionContainer.style.display = 'none';
-            ui.repoInputWrapper.style.display = 'block';
+            ui.buttons.addRepo.style.display = 'block';
             updateClearButtonVisibility();
             populateRepoResults(allSources);
-            ui.inputs.repoSearch.focus();
         });
 
         ui.buttons.selectedRepo.addEventListener('click', () => {
@@ -642,12 +655,51 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
+    function highlightHTML(htmlString) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlString, 'text/html');
+        const body = doc.body;
+
+        function traverse(node) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const tagName = node.tagName.toLowerCase();
+                const attributes = Array.from(node.attributes).map(attr =>
+                    `<span class="token-attr-name">${attr.name}</span>=<span class="token-attr-value">"${attr.value}"</span>`
+                ).join(' ');
+
+                let highlightedHTML = `&lt;<span class="token-tag">${tagName}</span>`;
+                if (attributes) {
+                    highlightedHTML += ` ${attributes}`;
+                }
+                highlightedHTML += '&gt;';
+
+                node.childNodes.forEach(child => {
+                    highlightedHTML += traverse(child);
+                });
+
+                highlightedHTML += `&lt;/<span class="token-tag">${tagName}</span>&gt;`;
+                return highlightedHTML;
+            } else if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent;
+            }
+            return '';
+        }
+
+        return traverse(body.firstChild);
+    }
+
+    function highlightCSSSelector(selector) {
+        return selector.replace(/(^| )(>| )([a-zA-Z0-9*_-]+)/g, '$1$2<span class="token-selector">$3</span>')
+                       .replace(/(\.[a-zA-Z0-9_-]+)/g, '<span class="token-attr-value">$1</span>')
+                       .replace(/(#[a-zA-Z0-9_-]+)/g, '<span class="token-attr-name">$1</span>');
+    }
+
     function renderCapturedElement(data, isCapturingCSS = false) {
         const card = ui.containers.elementPreviewCard;
         if (data && data.outerHTML) {
             card.style.display = 'block';
-            ui.previews.code.querySelector('code').textContent = data.outerHTML;
-            ui.previews.selector.querySelector('code').textContent = data.selector || 'N/A';
+            ui.previews.code.querySelector('code').innerHTML = highlightHTML(data.outerHTML);
+            ui.previews.selector.querySelector('code').innerHTML = highlightCSSSelector(data.selector || 'N/A');
             ui.toggles.captureCSS.checked = isCapturingCSS;
 
             const cssPreviewLabel = document.querySelector('label[for="cssPreview"]');

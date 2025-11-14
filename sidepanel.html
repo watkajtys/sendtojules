@@ -3,31 +3,24 @@
 <head>
     <title>Send To Jules</title>
     <style>
-        @font-face {
-            font-family: 'Google Sans Code';
-            src: url('fonts/GoogleSansCode[wght].ttf') format('truetype');
-            font-weight: 100 900; /* Adjust range as needed */
-        }
         /* ... (your full dark-mode style block) ... */
         :root {
-            --bg-primary           : rgb(25 26 31);
-            --bg-secondary         : rgb(35 39 47);
-            --bg-dropdown          : rgb(38 38 38);
-            --bg-dropdown-hover    : rgb(53 53 53);
-            --text-primary         : rgb(250 250 250);
-            --text-secondary       : rgb(207 207 207);
-            --text-placeholder     : rgb(111 111 111);
-            --text-error           : rgb(250 91 56);
-            --border-primary       : rgb(111 111 111);
-            --button-primary-bg    : rgb(186, 131, 172);
-
-            /* --- NEW: Toast/Toast-inspired colors --- */
-            /* (Color-picked from your screenshot) */
-            --toast-bg             : rgb(48, 45, 54);
-            --toast-button-bg      : rgb(117, 95, 204);
-            --toast-text-primary   : rgb(255, 255, 255);
-            --toast-text-secondary : rgb(160, 157, 166);
-            --toast-icon-color     : rgb(117, 95, 204);
+            --bg-primary: #1E1C20;
+            --bg-secondary: #2D2A30;
+            --bg-tertiary: #37343A;
+            --bg-dropdown: #252327;
+            --bg-dropdown-hover: #37343A;
+            --text-primary: #E6E6E6;
+            --text-secondary: #A09DA6;
+            --text-placeholder: #646464;
+            --text-error: #FA5B38;
+            --border-primary: #464646;
+            --button-primary-bg: #755FCC;
+            --toast-bg: #2D2A30;
+            --toast-text-primary: #E6E6E6;
+            --toast-text-secondary: #A09DA6;
+            --toast-icon-color: #755FCC;
+            --toast-button-bg: #37343A;
         }
 
         /* Spinner CSS */
@@ -49,11 +42,12 @@
         }
 
         body {
-            width            : 300px;
-            padding          : 15px;
-            font-family      : "Google Sans Code", sans-serif;
-            background-color : var(--bg-primary);
-            color            : var(--text-primary);
+            width: 300px;
+            padding: 10px;
+            font-family: sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
         }
 
         h3 {
@@ -95,20 +89,23 @@
             cursor  : not-allowed;
         }
 
-        textarea, #repoSearch {
-            width            : 100%;
-            box-sizing       : border-box;
-            margin-top       : 5px;
-            background-color : var(--bg-secondary);
-            color            : var(--text-primary);
-            border           : 1px solid var(--border-primary);
-            border-radius    : 6px;
-            font-family      : "Google Sans Code", monospace;
+        textarea,
+        #repoSearch {
+            width: 100%;
+            box-sizing: border-box;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            font-family: sans-serif;
+            font-size: 1.1em;
+            padding: 10px;
         }
 
         textarea {
-            height : 80px;
-            resize : vertical;
+            height: 120px;
+            resize: vertical;
+            margin-top: 10px;
         }
 
         #repoSearch {
@@ -121,15 +118,17 @@
         }
 
         #repoResults {
-            background-color : var(--bg-dropdown);
-            border           : 1px solid var(--border-primary);
-            border-top       : none;
-            border-radius    : 0 0 6px 6px;
-            max-height       : 100px;
-            overflow-y       : auto;
-            display          : none;
-            position         : relative;
-            z-index          : 10;
+            background-color: var(--bg-dropdown);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            display: none;
+            position: absolute;
+            z-index: 10;
+            width: 100%;
+            top: 45px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         #repoResults div {
@@ -238,26 +237,46 @@
             font-weight: bold;
         }
 
-        .repo-search-container {
-            position: relative;
+        .repo-selection-ui {
             display: flex;
             align-items: center;
+            gap: 10px;
         }
 
-        /* --- GitHub-Style Selector --- */
-        #sourceSelectionContainer {
-            display: none; /* Hidden by default */
-            align-items: center;
-            gap: 4px;
-            margin-top: 5px;
+        .add-repo-button {
+            background-color: var(--bg-secondary);
             border: 1px solid var(--border-primary);
             border-radius: 6px;
-            height: 38px;
-            padding: 0 4px;
-            overflow: hidden; /* Prevent content from spilling */
+            cursor: pointer;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        #selectedRepoButton, #selectedBranchButton {
+        .add-repo-icon {
+            width: 20px;
+            height: 20px;
+            stroke: var(--text-primary);
+        }
+
+        .source-selection-container {
+            display: flex;
+            align-items: center;
+            background-color: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 5px 10px;
+            gap: 10px;
+        }
+
+        .repo-icon {
+            width: 16px;
+            height: 16px;
+            filter: invert(1);
+        }
+
+        #selectedRepoButton,
+        #selectedBranchButton {
             background-color: transparent;
             border: none;
             color: var(--text-primary);
@@ -295,11 +314,12 @@
             right: 0;
             background-color: var(--bg-dropdown);
             border: 1px solid var(--border-primary);
-            border-radius: 6px;
-            max-height: 150px;
+            border-radius: 8px;
+            max-height: 200px;
             overflow-y: auto;
             z-index: 20;
-            margin-top: 2px;
+            margin-top: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         #branchSearchContainer {
@@ -596,7 +616,6 @@
             border-radius: 6px;
             padding: 12px;
             margin-top: 15px;
-            border: 1px solid var(--border-primary);
         }
 
         #element-preview-card h4 {
@@ -614,13 +633,25 @@
             display: flex;
             gap: 10px;
             margin-top: 15px;
+            justify-content: flex-end;
         }
 
-        #element-preview-actions button {
-            width: 50%;
-            margin-top: 0;
-            font-size: 0.9em;
+        .action-icon {
+            cursor: pointer;
+            width: 20px;
+            height: 20px;
+            opacity: 0.7;
+            stroke: var(--text-primary);
         }
+
+        .action-icon:hover {
+            opacity: 1;
+        }
+
+        .token-tag { color: #ac885c; }
+        .token-attr-name { color: #f9ed99; }
+        .token-attr-value { color: #909e6a; }
+        .token-selector { color: #ce6849; }
 
         #main-action-buttons {
             display: flex;
@@ -633,22 +664,37 @@
             margin-top: 0; /* Override default button margin */
         }
 
+        .submit-button {
+            background-color: var(--button-primary-bg);
+            border-radius: 6px;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-        #viewHistoryLink {
-            display: block;
-            text-align: center;
+        .submit-icon {
+            width: 20px;
+            height: 20px;
+            stroke: var(--text-primary);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: space-between;
             margin-top: 20px;
+        }
+
+        .footer-links a {
             color: var(--text-secondary);
             text-decoration: none;
             font-size: 0.9em;
         }
-        #viewHistoryLink:hover {
-            text-decoration: underline;
-        }
-        #context-toggles {
-            margin-top: 20px;
+
+        #debugging-section {
+            margin-top: 15px;
             border-top: 1px solid var(--border-primary);
-            padding-top: 5px;
+            padding-top: 10px;
         }
 
         /* --- Box Model Visualizer Styles --- */
@@ -689,28 +735,24 @@
 
 <div id="taskView" style="display: block;">
     <!-- 1. Description is now the top-most element -->
-    <label for="taskPrompt">Description</label>
-    <textarea id="taskPrompt" placeholder="Describe the task for Jules..."></textarea>
+    <textarea id="taskPrompt" placeholder="Help me fix this error ..."></textarea>
 
     <!-- 2. Repo/Branch Selection -->
-    <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
     <div id="repo-input-wrapper">
-        <div class="repo-search-container">
-            <input type="text" id="repoSearch" placeholder="Loading repositories...">
-            <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
-        </div>
-        <div id="repoResults"></div>
-    </div>
-    <div id="sourceSelectionContainer">
-        <button id="selectedRepoButton"></button>
-        <div id="branch-selector-wrapper">
-             <button id="selectedBranchButton"></button>
-             <div id="branchResults" style="display: none;">
-                <div id="branchSearchContainer">
-                    <img src="icons/search.svg" id="branchSearchIcon">
-                    <input type="text" id="branchSearch" placeholder="Find a branch">
-                </div>
-                <div id="branchList"></div>
+        <div id="repo-selection-ui" class="repo-selection-ui">
+            <button id="addRepoButton" class="add-repo-button">
+                <img src="icons/plus.svg" class="add-repo-icon">
+            </button>
+            <div id="repo-search-container" class="repo-search-container" style="display: none;">
+                 <input type="text" id="repoSearch" placeholder="Search for a repository...">
+                 <div id="repoResults"></div>
+            </div>
+
+            <div id="sourceSelectionContainer" class="source-selection-container" style="display: none;">
+                <img src="icons/github.svg" class="repo-icon">
+                <span id="selectedRepoButton"></span>
+                <span id="selectedBranchButton"></span>
+                <img src="icons/close.svg" id="clearRepoSelection" class="clear-repo-selection">
             </div>
         </div>
     </div>
@@ -745,8 +787,8 @@
         </div>
 
         <div id="element-preview-actions">
-          <button id="reselect">Reselect</button>
-          <button id="dismissTask">Dismiss</button>
+          <img src="icons/reselect.svg" id="reselect" class="action-icon" title="Reselect element">
+          <img src="icons/close.svg" id="dismissTask" class="action-icon" title="Dismiss element">
         </div>
     </div>
 
@@ -754,12 +796,17 @@
     <!-- 4. Main Action Buttons -->
     <div id="main-action-buttons">
         <button id="selectElement">Select Element</button>
-        <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
+        <button id="submitTask" class="submit-button">
+            <img src="icons/arrow-right.svg" class="submit-icon">
+        </button>
     </div>
 
+    <div class="footer-links">
+        <a href="#" id="debuggingLink">Debugging</a>
+        <a href="#" id="viewHistoryLink">History</a>
+    </div>
 
-    <!-- 5. Context Toggles at the bottom -->
-    <div id="context-toggles">
+    <div id="debugging-section" style="display: none;">
         <div class="toggle-container">
             <label class="switch">
                 <input type="checkbox" id="captureLogsToggle">
@@ -782,12 +829,6 @@
             This will capture network requests (XHR, Fetch) and their responses to help diagnose issues with APIs and data loading.
         </div>
     </div>
-
-
-    <!-- 6. Misc items (Status messages, History link) -->
-    <div id="info-message"></div>
-    <a href="#" id="viewHistoryLink">View Task History</a>
-
 </div>
 
 <div id="resultView">
