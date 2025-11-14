@@ -645,32 +645,111 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.historyList.appendChild(fragment);
     }
 
+    function formatAndHighlightHTML(html) {
+        if (!html) return '';
+
+        // 1. Indentation
+        let indentedHtml = '';
+        let indentLevel = 0;
+        const tab = '  '; // Two spaces for indentation
+
+        // Split by tags, keeping the tags in the result
+        html.split(/(<[^>]*>)/).forEach(part => {
+            if (!part || part.trim() === '') return;
+
+            // Closing tag: un-indent before adding
+            if (part.startsWith('</')) {
+                indentLevel = Math.max(0, indentLevel - 1);
+            }
+
+            indentedHtml += `${tab.repeat(indentLevel)}${part}\n`;
+
+            // Opening tag (but not self-closing): indent after adding
+            if (part.startsWith('<') && !part.startsWith('</') && !part.endsWith('/>')) {
+                indentLevel++;
+            }
+        });
+
+        // 2. Highlighting (on the now-indented HTML)
+        return highlightHTML(indentedHtml.trim());
+    }
+
+    function highlightHTML(html) {
+        if (!html) return '';
+        // Escape HTML to prevent it from being rendered
+        let escaped = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Define regex patterns
+        const patterns = {
+            tags: /&lt;(\/?[\w\d-]+)/g,
+            attributes: /([\w\d-]+)=/g,
+            stringValues: /="([^"]*)"|='([^']*)'/g,
+            gtSymbol: /(&gt;)/g
+        };
+
+        // Apply highlighting
+        return escaped
+            .replace(patterns.tags, '&lt;<span class="hl-tag">$1</span>')
+            .replace(patterns.attributes, '<span class="hl-attr">$1</span>=')
+            .replace(patterns.stringValues, (match, double, single) => {
+                if (double !== undefined) return `="<span class="hl-val">${double}</span>"`;
+                if (single !== undefined) return `='<span class="hl-val">${single}</span>'`;
+                return match; // Should not happen with this regex
+            })
+            .replace(patterns.gtSymbol, '<span class="hl-tag">$1</span>');
+    }
+
+    function highlightCSS(css) {
+        if (!css) return '';
+        let escaped = css.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const patterns = {
+            comments: /(\/\*[\s\S]*?\*\/)/g,
+            properties: /^(\s*)([\w-]+):/gm,
+            values: /: (.*?);/g
+        };
+
+        return escaped
+            .replace(patterns.comments, '<span class="hl-comment">$1</span>')
+            .replace(patterns.properties, '$1<span class="hl-prop">$2</span>:')
+            .replace(patterns.values, ': <span class="hl-css-val">$1</span>;');
+    }
+
     function renderBoxModel(dimensions) {
         const { width, height, margin, padding, border } = dimensions;
-        // Simple parseFloat and format to 2 decimal places
-        const format = (val) => parseFloat(val).toFixed(2);
+
+        // --- NEW: Formatting function for box model values ---
+        const formatBoxValue = (value) => {
+            const num = parseFloat(value);
+            // Check if the number is an integer or has insignificant decimals
+            if (num % 1 === 0) {
+                return num.toFixed(0); // Return as whole number, e.g., "12", "0"
+            }
+            // Otherwise, return with up to 2 decimal places, stripping trailing zeros
+            return parseFloat(num.toFixed(2));
+        };
 
         ui.containers.boxModel.innerHTML = `
             <div class="box-model-margin">
                 <span class="box-model-label">Margin</span>
-                <div class="box-model-top">${format(margin.top)}</div>
-                <div class="box-model-left">${format(margin.left)}</div>
-                <div class="box-model-right">${format(margin.right)}</div>
-                <div class="box-model-bottom">${format(margin.bottom)}</div>
+                <div class="box-model-top">${formatBoxValue(margin.top)}</div>
+                <div class="box-model-left">${formatBoxValue(margin.left)}</div>
+                <div class="box-model-right">${formatBoxValue(margin.right)}</div>
+                <div class="box-model-bottom">${formatBoxValue(margin.bottom)}</div>
                 <div class="box-model-border">
                     <span class="box-model-label">Border</span>
-                    <div class="box-model-top">${format(border.top)}</div>
-                    <div class="box-model-left">${format(border.left)}</div>
-                    <div class="box-model-right">${format(border.right)}</div>
-                    <div class="box-model-bottom">${format(border.bottom)}</div>
+                    <div class="box-model-top">${formatBoxValue(border.top)}</div>
+                    <div class="box-model-left">${formatBoxValue(border.left)}</div>
+                    <div class="box-model-right">${formatBoxValue(border.right)}</div>
+                    <div class="box-model-bottom">${formatBoxValue(border.bottom)}</div>
                     <div class="box-model-padding">
                         <span class="box-model-label">Padding</span>
-                        <div class="box-model-top">${format(padding.top)}</div>
-                        <div class="box-model-left">${format(padding.left)}</div>
-                        <div class="box-model-right">${format(padding.right)}</div>
-                        <div class="box-model-bottom">${format(padding.bottom)}</div>
+                        <div class="box-model-top">${formatBoxValue(padding.top)}</div>
+                        <div class="box-model-left">${formatBoxValue(padding.left)}</div>
+                        <div class="box-model-right">${formatBoxValue(padding.right)}</div>
+                        <div class="box-model-bottom">${formatBoxValue(padding.bottom)}</div>
                         <div class="box-model-content">
-                            ${format(width)} x ${format(height)}
+                            ${formatBoxValue(width)} x ${formatBoxValue(height)}
                         </div>
                     </div>
                 </div>
@@ -682,7 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = ui.containers.elementPreviewCard;
         if (data && data.outerHTML) {
             card.style.display = 'block';
-            ui.previews.code.querySelector('code').textContent = data.outerHTML;
+            ui.previews.code.querySelector('code').innerHTML = formatAndHighlightHTML(data.outerHTML);
             ui.previews.selector.querySelector('code').textContent = data.selector || 'N/A';
             ui.toggles.captureCSS.checked = isCapturingCSS;
 
@@ -707,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         formattedCss += `  ${prop}: ${value};\n`;
                     }
                 }
-                ui.previews.css.querySelector('code').textContent = formattedCss.trim() || 'No CSS captured.';
+            ui.previews.css.querySelector('code').innerHTML = highlightCSS(formattedCss.trim() || 'No CSS captured.');
             }
 
             if (showBoxModel) {
