@@ -11,7 +11,7 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
 
     // --- Message Handlers ---
 
-    async function handleGetPopupData(sendResponse) {
+    async function handleGetSidePanelData(sendResponse) {
         try {
             const state = stateManager.getState();
             const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -32,7 +32,7 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
             });
 
         } catch (error) {
-            console.error("Error getting popup data:", error);
+            console.error("Error getting side panel data:", error);
             sendResponse({ error: "Failed to retrieve initial data." });
         }
 
@@ -94,7 +94,7 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         switch (message.action) {
-            case 'popupOpened':
+            case 'sidePanelOpened':
                 sendResponse({ taskPromptText: stateManager.getState().taskPromptText });
                 return true; // Keep the message channel open for sendResponse
             case 'saveTaskPrompt':
@@ -103,8 +103,8 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
             case 'setViewState':
                 stateManager.setViewState(message.view);
                 break;
-            case 'getPopupData':
-                handleGetPopupData(sendResponse);
+            case 'getSidePanelData':
+                handleGetSidePanelData(sendResponse);
                 return true;
             case 'startSelection':
                 handleStartSelection();
@@ -190,5 +190,13 @@ import { manageDebuggerState, detachDebugger, onDebuggerEvent } from './debugger
             console.log(`Jules debugger: debugged tab ${tabId} was closed.`);
             // The onDetach listener will handle the cleanup.
         }
+    });
+
+    chrome.action.onClicked.addListener(async (tab) => {
+        const { id: tabId } = tab;
+        if (!tabId) return;
+
+        // This allows the side panel to open on the current tab
+        await chrome.sidePanel.open({ tabId });
     });
 })();

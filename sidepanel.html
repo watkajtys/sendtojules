@@ -594,13 +594,10 @@
 <body>
 <h3>Send To Jules</h3>
 
-<div id="selectView">
+<div id="taskView" style="display: block;">
     <button id="selectElement">Select an Element</button>
-    <button id="createTaskWithoutSelection">Create task without selection</button>
     <button id="viewHistory">View Task History</button>
-</div>
 
-<div id="taskView" style="display: none;">
     <label for="repoSearch">Repository <div id="repoLoadingSpinner" class="spinner"></div></label>
     <div id="repo-input-wrapper">
         <div class="repo-search-container">
@@ -675,7 +672,7 @@
     <button id="submitTask">Submit to Jules <div id="submitSpinner" class="spinner"></div></button>
     <div id="action-buttons">
       <button id="reselect">Reselect</button>
-      <button id="cancelTask">Cancel</button>
+      <button id="cancelTask">New Task</button>
     </div>
 </div>
 
@@ -687,12 +684,6 @@
     </div>
     <a id="sessionLink" href="#" target="_blank">View task</a>
 </div>
-
-<div id="dismissView">
-    <button id="dismissTask">Dismiss</button>
-</div>
-
-<button id="startOver" style="display: none;">Start Over</button>
 
 <div id="status"></div>
 
@@ -707,6 +698,6 @@
     <div id="historyLoadingSpinner" class="spinner" style="display: none;"></div>
 </div>
 
-<script src="popup.js"></script>
+<script src="sidepanel.js"></script>
 </body>
 </html>
