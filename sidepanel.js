@@ -188,6 +188,26 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.inputs.taskPrompt.focus();
     }
 
+    function autopopulateRepo() {
+        // Only autopopulate if no repo has been selected by the user yet
+        if (ui.inputs.selectedRepo.value) {
+            return;
+        }
+
+        if (recentRepos && recentRepos.length > 0) {
+            const lastUsedRepo = recentRepos[0];
+            const repoExistsInAllSources = allSources.some(s => s.id === lastUsedRepo.id);
+
+            if (repoExistsInAllSources) {
+                // We need a mock item to pass to selectRepoItem
+                const mockItem = {
+                    dataset: { id: lastUsedRepo.id }
+                };
+                selectRepoItem(mockItem);
+            }
+        }
+    }
+
     function highlightRepoItem(index) {
         const items = ui.repoResults.querySelectorAll('._jules_repo-item');
         items.forEach(item => item.classList.remove('highlighted'));
@@ -513,6 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const currentQuery = ui.inputs.repoSearch.value.toLowerCase();
                     const filtered = allSources.filter(s => s.name.toLowerCase().includes(currentQuery));
                     populateRepoResults(filtered);
+                    autopopulateRepo();
                     break;
 
                 case "julesResponse":
