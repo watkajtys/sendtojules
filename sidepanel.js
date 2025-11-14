@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startOver: document.getElementById('startOver'),
             clearRepo: document.getElementById('clearRepoSelection'),
             dismissTask: document.getElementById('dismissTask'),
+            newTask: document.getElementById('newTaskButton'),
             selectedRepo: document.getElementById('selectedRepoButton'),
             selectedBranch: document.getElementById('selectedBranchButton'),
         },
@@ -364,6 +365,10 @@ document.addEventListener('DOMContentLoaded', () => {
              renderCapturedElement(null); // This will hide the card and clear previews
         });
 
+        ui.buttons.newTask.addEventListener('click', () => {
+            chrome.runtime.sendMessage({ action: 'resetStateAndGoToTaskView' });
+        });
+
         ui.buttons.clearRepo.addEventListener('click', () => {
             ui.inputs.repoSearch.value = '';
             ui.inputs.selectedRepo.value = '';
@@ -576,6 +581,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case "elementUpdated":
                     renderCapturedElement(message.data);
+                    break;
+                case "stateReset":
+                    // When the state is reset from the background, we need to re-init the sidepanel
+                    init();
                     break;
             }
         });
