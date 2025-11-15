@@ -113,16 +113,26 @@ export async function createJulesSession(task, data, sourceName, branch, apiKey,
         }
     }
     if (logs && logs.length > 0) {
-        const formattedLogs = logs.map(log => `[${log.timestamp}] [${log.level}] ${log.message}`).join('\n');
-        prompt += `\n\n--- Captured Console Logs ---\n${formattedLogs}\n--- End Logs ---`;
+        prompt += `\n\n--- Captured Console Logs ---\n\`\`\`json\n${JSON.stringify(logs, null, 2)}\n\`\`\``;
     }
 
     const networkActivity = stateManager.getCapturedNetworkActivity();
     if (networkActivity && networkActivity.length > 0) {
-        const formattedNetwork = networkActivity.map(req => {
-            return `[${new Date(req.timestamp * 1000).toISOString()}] ${req.method} ${req.url} - Status: ${req.status}\nResponse Body (truncated):\n${req.responseBody || 'N/A'}`;
-        }).join('\n\n');
-        prompt += `\n\n--- Captured Network Activity ---\n${formattedNetwork}\n--- End Network Activity ---`;
+        const formattedNetwork = networkActivity.map(req => ({
+            timestamp: new Date(req.timestamp * 1000).toISOString(),
+            request: {
+                url: req.url,
+                method: req.method,
+                headers: req.headers,
+                body: req.postData,
+            },
+            response: {
+                status: req.status,
+                headers: req.responseHeaders,
+                body: req.responseBody || 'N/A',
+            },
+        }));
+        prompt += `\n\n--- Captured Network Activity ---\n\`\`\`json\n${JSON.stringify(formattedNetwork, null, 2)}\n\`\`\``;
     }
 
     const payload = {
