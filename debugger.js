@@ -24,6 +24,7 @@ export function onDebuggerEvent(debuggeeId, method, params, stateManager) {
             url: params.request.url,
             method: params.request.method,
             headers: params.request.headers,
+            postData: params.request.postData,
             timestamp: params.timestamp,
         });
     } else if (method === 'Network.responseReceived') {
@@ -42,7 +43,7 @@ export function onDebuggerEvent(debuggeeId, method, params, stateManager) {
                         return;
                     }
                     if (response && response.body) {
-                        request.responseBody = response.body.substring(0, 500); // Truncate
+                        request.responseBody = response.body.substring(0, 2000); // Truncate
                     }
                 }
             );
